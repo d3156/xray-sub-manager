@@ -185,13 +185,14 @@
 
     .graph-chain {
       display: grid;
-      gap: 10px;
+      gap: 12px;
     }
 
     .graph-node {
       position: relative;
       overflow: hidden;
       animation: fadeUp 0.45s ease;
+      min-height: 148px;
     }
 
     .graph-node::after {
@@ -201,6 +202,39 @@
       height: 1px;
       background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
       animation: scan 2.6s linear infinite;
+    }
+
+    .graph-arrow {
+      position: relative;
+      min-height: 42px;
+      color: var(--text-muted);
+      overflow: hidden;
+    }
+
+    .graph-arrow::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, rgba(0, 212, 255, 0.1), rgba(180, 79, 255, 0.9), rgba(0, 255, 136, 0.14));
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.28);
+    }
+
+    .graph-arrow::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 1px;
+      width: 11px;
+      height: 11px;
+      border-right: 2px solid var(--neon-cyan);
+      border-bottom: 2px solid var(--neon-cyan);
+      transform: translateX(-50%) rotate(45deg);
+      box-shadow: 2px 2px 12px rgba(0, 212, 255, 0.38);
+      animation: arrowPulseVertical 1.4s ease-in-out infinite;
     }
 
     .graph-title {
@@ -400,13 +434,47 @@
       }
 
       .graph-chain {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr);
         align-items: stretch;
+      }
+
+      .graph-arrow {
+        min-height: auto;
+      }
+
+      .graph-arrow::before {
+        left: 4px;
+        right: 10px;
+        top: 50%;
+        bottom: auto;
+        width: auto;
+        height: 2px;
+        transform: translateY(-50%);
+        background: linear-gradient(90deg, rgba(0, 212, 255, 0.1), rgba(180, 79, 255, 0.9), rgba(0, 255, 136, 0.14));
+      }
+
+      .graph-arrow::after {
+        left: auto;
+        right: 2px;
+        bottom: auto;
+        top: 50%;
+        transform: translateY(-50%) rotate(-45deg);
+        animation: arrowPulseHorizontal 1.4s ease-in-out infinite;
       }
 
       .main-grid {
         grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
       }
+    }
+
+    @keyframes arrowPulseVertical {
+      0%, 100% { transform: translateX(-50%) rotate(45deg); opacity: 0.8; }
+      50% { transform: translateX(-50%) translateY(2px) rotate(45deg); opacity: 1; }
+    }
+
+    @keyframes arrowPulseHorizontal {
+      0%, 100% { transform: translateY(-50%) rotate(-45deg); opacity: 0.8; }
+      50% { transform: translateY(-50%) translateX(2px) rotate(-45deg); opacity: 1; }
     }
   </style>
 </head>
@@ -483,16 +551,19 @@
           <div id="graph-fetched" class="graph-value">0 nodes</div>
           <div class="muted small">All parsed nodes before filtering</div>
         </article>
+        <div class="graph-arrow" aria-hidden="true"></div>
         <article class="card graph-node accent-purple">
           <span class="graph-title">Dedup</span>
-          <div id="graph-dedup" class="graph-value">-0 dupes</div>
+          <div id="graph-dedup" class="graph-value">0 dupes removed</div>
           <div class="muted small">Removed fingerprint collisions</div>
         </article>
+        <div class="graph-arrow" aria-hidden="true"></div>
         <article class="card graph-node accent-orange">
           <span class="graph-title">Ping</span>
-          <div id="graph-ping" class="graph-value">-0 offline</div>
+          <div id="graph-ping" class="graph-value">0 offline filtered</div>
           <div id="ping-progress" class="muted small">TCP reachability filter</div>
         </article>
+        <div class="graph-arrow" aria-hidden="true"></div>
         <article class="card graph-node accent-green">
           <span class="graph-title">Result</span>
           <div id="graph-result" class="graph-value">0 nodes</div>
@@ -563,6 +634,8 @@
       ws: null,
       isAuthenticated: false
     };
+
+    const numberFormatter = new Intl.NumberFormat();
 
     const els = {
       login: document.getElementById('login'),
@@ -660,6 +733,10 @@
       return date.toLocaleString();
     }
 
+    function formatNumber(value) {
+      return numberFormatter.format(Number(value || 0));
+    }
+
     function formatCountdown(target) {
       if (!target) {
         return '--:--:--';
@@ -679,13 +756,13 @@
       const removedDupes = Math.max(0, stats.nodes_total - stats.nodes_after_dedup);
       const removedOffline = Math.max(0, stats.nodes_after_dedup - stats.nodes_after_ping);
 
-      els.totalNodes.textContent = String(stats.nodes_total);
-      els.dedupNodes.textContent = String(stats.nodes_after_dedup);
-      els.onlineNodes.textContent = String(stats.nodes_after_ping);
-      els.graphFetched.textContent = `${stats.nodes_total} nodes`;
-      els.graphDedup.textContent = `-${removedDupes} dupes`;
-      els.graphPing.textContent = `-${removedOffline} offline`;
-      els.graphResult.textContent = `${stats.nodes_after_ping} nodes`;
+      els.totalNodes.textContent = formatNumber(stats.nodes_total);
+      els.dedupNodes.textContent = formatNumber(stats.nodes_after_dedup);
+      els.onlineNodes.textContent = formatNumber(stats.nodes_after_ping);
+      els.graphFetched.textContent = `${formatNumber(stats.nodes_total)} nodes`;
+      els.graphDedup.textContent = `${formatNumber(removedDupes)} dupes removed`;
+      els.graphPing.textContent = `${formatNumber(removedOffline)} offline filtered`;
+      els.graphResult.textContent = `${formatNumber(stats.nodes_after_ping)} nodes`;
       els.lastUpdate.textContent = formatDate(stats.last_update);
       els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
       els.countdown.textContent = formatCountdown(state.nextUpdate);

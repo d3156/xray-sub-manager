@@ -57,8 +57,9 @@ http://127.0.0.1:8080/sub?token=<subscription_token>
 sudo ./install.sh
 ```
 
-Скрипт установки:
+Скрипт установки для Ubuntu:
 
+- автоматически устанавливает необходимые пакеты (`cargo`, `rustc`, `python3`, `build-essential`, `pkg-config`, `libssl-dev` и другие)
 - собирает release-бинарь
 - устанавливает бинарь в `/opt/xray-sub-manager/bin/xray-sub-manager`
 - копирует `static/index.html` в `/opt/xray-sub-manager/static/index.html`
