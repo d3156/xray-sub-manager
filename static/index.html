@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>xray-sub-manager</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface-2: #1a1a24;
+      --border: rgba(100, 100, 160, 0.2);
+      --neon-cyan: #00d4ff;
+      --neon-purple: #b44fff;
+      --neon-green: #00ff88;
+      --neon-orange: #ff6b35;
+      --text: #e0e0f0;
+      --text-muted: #8080a0;
+      --danger: #ff4f78;
+      --shadow-cyan: 0 0 20px rgba(0, 212, 255, 0.15);
+      --shadow-purple: 0 0 20px rgba(180, 79, 255, 0.15);
+      --shadow-green: 0 0 20px rgba(0, 255, 136, 0.15);
+      --shadow-orange: 0 0 20px rgba(255, 107, 53, 0.15);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(180, 79, 255, 0.12), transparent 24%),
+        linear-gradient(180deg, rgba(17, 17, 24, 0.96), rgba(10, 10, 15, 1));
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(circle at center, black, transparent 82%);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(26, 26, 36, 0.9), rgba(17, 17, 24, 0.92));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      backdrop-filter: blur(14px);
+    }
+
+    .accent-cyan { border-color: rgba(0, 212, 255, 0.28); box-shadow: var(--shadow-cyan); }
+    .accent-purple { border-color: rgba(180, 79, 255, 0.28); box-shadow: var(--shadow-purple); }
+    .accent-green { border-color: rgba(0, 255, 136, 0.28); box-shadow: var(--shadow-green); }
+    .accent-orange { border-color: rgba(255, 107, 53, 0.28); box-shadow: var(--shadow-orange); }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .brand svg {
+      width: 44px;
+      height: 44px;
+      filter: drop-shadow(0 0 16px rgba(0, 212, 255, 0.35));
+    }
+
+    .brand-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .brand-title strong {
+      font-size: 1.05rem;
+    }
+
+    .brand-title span {
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px 15px;
+      cursor: pointer;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.03);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.08));
+      border-color: rgba(0, 212, 255, 0.4);
+      box-shadow: var(--shadow-cyan);
+    }
+
+    .btn-secondary {
+      border-color: rgba(180, 79, 255, 0.35);
+      background: linear-gradient(135deg, rgba(180, 79, 255, 0.16), rgba(180, 79, 255, 0.05));
+    }
+
+    .btn-danger {
+      border-color: rgba(255, 79, 120, 0.38);
+      background: linear-gradient(135deg, rgba(255, 79, 120, 0.16), rgba(255, 79, 120, 0.05));
+    }
+
+    .stats-grid,
+    .main-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+      margin-bottom: 16px;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-top: 10px;
+    }
+
+    .stat-label,
+    .eyebrow,
+    .muted {
+      color: var(--text-muted);
+    }
+
+    .state-graph {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .graph-chain {
+      display: grid;
+      gap: 10px;
+    }
+
+    .graph-node {
+      position: relative;
+      overflow: hidden;
+      animation: fadeUp 0.45s ease;
+    }
+
+    .graph-node::after {
+      content: "";
+      position: absolute;
+      inset: auto -30% 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+      animation: scan 2.6s linear infinite;
+    }
+
+    .graph-title {
+      display: block;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .graph-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+    }
+
+    .main-grid {
+      grid-template-columns: 1fr;
+      margin-bottom: 16px;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 0.92rem;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      padding: 12px 13px;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: rgba(0, 212, 255, 0.42);
+      box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.08);
+    }
+
+    textarea {
+      min-height: 168px;
+      resize: vertical;
+    }
+
+    .kv {
+      display: grid;
+      gap: 12px;
+    }
+
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .kv-row:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--neon-green);
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.45);
+    }
+
+    .status-pill.updating .status-dot {
+      background: var(--neon-orange);
+      box-shadow: 0 0 12px rgba(255, 107, 53, 0.45);
+      animation: pulse 1.1s infinite;
+    }
+
+    .endpoint {
+      display: grid;
+      gap: 14px;
+      word-break: break-all;
+    }
+
+    .endpoint-line {
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.87rem;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      width: min(460px, 100%);
+      padding: 24px;
+    }
+
+    .login-card h1 {
+      margin: 0;
+      font-size: 1.55rem;
+    }
+
+    .login-card p {
+      color: var(--text-muted);
+      margin: 6px 0 0;
+    }
+
+    .error {
+      color: var(--danger);
+      min-height: 1.25em;
+      margin-top: 10px;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      display: grid;
+      gap: 10px;
+      z-index: 50;
+    }
+
+    .toast {
+      min-width: 240px;
+      max-width: 360px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(17, 17, 24, 0.96);
+      animation: fadeUp 0.25s ease;
+    }
+
+    .toast.success { border-color: rgba(0, 255, 136, 0.3); box-shadow: var(--shadow-green); }
+    .toast.error { border-color: rgba(255, 79, 120, 0.3); box-shadow: 0 0 20px rgba(255, 79, 120, 0.14); }
+
+    .small {
+      font-size: 0.86rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.65; }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes scan {
+      from { transform: translateX(-20%); }
+      to { transform: translateX(120%); }
+    }
+
+    @media (min-width: 760px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .graph-chain {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: stretch;
+      }
+
+      .main-grid {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="login" class="login-wrap">
+    <div class="card accent-cyan login-card">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <path d="M32 6 11 18v14c0 13 8.8 24.7 21 27 12.2-2.3 21-14 21-27V18L32 6Z" stroke="#00d4ff" stroke-width="3"/>
+          <path d="M22 32h20M32 22v20" stroke="#b44fff" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div class="brand-title">
+          <strong>xray-sub-manager</strong>
+          <span>Proxy subscription control panel</span>
+        </div>
+      </div>
+      <form id="login-form" class="form-grid" style="margin-top: 22px;">
+        <label>
+          <span>🔑 Access Token</span>
+          <input id="token-input" type="password" autocomplete="off" placeholder="Enter admin token" required>
+        </label>
+        <button class="btn-primary" type="submit">Enter</button>
+        <div id="login-error" class="error"></div>
+      </form>
+    </div>
+  </section>
+
+  <main id="dashboard" class="page hidden">
+    <header class="header card accent-cyan">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <path d="M32 6 11 18v14c0 13 8.8 24.7 21 27 12.2-2.3 21-14 21-27V18L32 6Z" stroke="#00d4ff" stroke-width="3"/>
+          <circle cx="32" cy="32" r="9" stroke="#00ff88" stroke-width="3"/>
+          <path d="M32 19v6M45 32h-6M32 45v-6M19 32h6" stroke="#b44fff" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div class="brand-title">
+          <strong>xray-sub-manager</strong>
+          <span id="status-text">Ready</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="update-now" class="btn-primary" type="button">↻ Update Now</button>
+        <button id="logout" class="btn-danger" type="button">Logout</button>
+      </div>
+    </header>
+
+    <section class="stats-grid">
+      <article class="card accent-cyan">
+        <div class="stat-label">📡 Total Nodes</div>
+        <div id="total-nodes" class="stat-value">0</div>
+      </article>
+      <article class="card accent-purple">
+        <div class="stat-label">🔗 After Dedup</div>
+        <div id="dedup-nodes" class="stat-value">0</div>
+      </article>
+      <article class="card accent-green">
+        <div class="stat-label">✅ After Ping</div>
+        <div id="online-nodes" class="stat-value">0</div>
+      </article>
+      <article class="card accent-orange">
+        <div class="stat-label">⏱ Next Update</div>
+        <div id="countdown" class="stat-value" style="font-size: 1.35rem;">--:--:--</div>
+      </article>
+    </section>
+
+    <section class="card state-graph">
+      <div>
+        <div class="eyebrow">State Graph</div>
+        <h2 style="margin: 8px 0 0; font-size: 1.2rem;">Pipeline flow</h2>
+      </div>
+      <div class="graph-chain">
+        <article class="card graph-node accent-cyan">
+          <span class="graph-title">Fetched</span>
+          <div id="graph-fetched" class="graph-value">0 nodes</div>
+          <div class="muted small">All parsed nodes before filtering</div>
+        </article>
+        <article class="card graph-node accent-purple">
+          <span class="graph-title">Dedup</span>
+          <div id="graph-dedup" class="graph-value">-0 dupes</div>
+          <div class="muted small">Removed fingerprint collisions</div>
+        </article>
+        <article class="card graph-node accent-orange">
+          <span class="graph-title">Ping</span>
+          <div id="graph-ping" class="graph-value">-0 offline</div>
+          <div id="ping-progress" class="muted small">TCP reachability filter</div>
+        </article>
+        <article class="card graph-node accent-green">
+          <span class="graph-title">Result</span>
+          <div id="graph-result" class="graph-value">0 nodes</div>
+          <div class="muted small">Base64 output subscription</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <article class="card accent-purple">
+        <div class="eyebrow">Update Info</div>
+        <h2 style="margin: 8px 0 16px; font-size: 1.2rem;">Runtime status</h2>
+        <div class="kv">
+          <div class="kv-row"><span>Last update</span><strong id="last-update">Never</strong></div>
+          <div class="kv-row"><span>Next update</span><strong id="next-update">--</strong></div>
+          <div class="kv-row"><span>Status</span><span id="status-pill" class="status-pill"><span class="status-dot"></span><span>Ready</span></span></div>
+        </div>
+      </article>
+
+      <article class="card accent-cyan">
+        <div class="eyebrow">Settings</div>
+        <h2 style="margin: 8px 0 16px; font-size: 1.2rem;">Subscription sources</h2>
+        <form id="settings-form" class="form-grid">
+          <label>
+            <span>Subscription URLs</span>
+            <textarea id="subscription-urls" placeholder="https://example.com/sub1&#10;https://example.com/sub2"></textarea>
+          </label>
+          <label>
+            <span>Update interval (minutes)</span>
+            <input id="interval-input" type="number" min="1" required>
+          </label>
+          <label>
+            <span>Ping timeout (ms)</span>
+            <input id="timeout-input" type="number" min="100" max="30000" required>
+          </label>
+          <label>
+            <span>Max parallel pings</span>
+            <input id="parallel-input" type="number" min="1" max="500" required>
+          </label>
+          <button class="btn-primary" type="submit">Save Settings</button>
+        </form>
+      </article>
+    </section>
+
+    <section class="card accent-green endpoint">
+      <div>
+        <div class="eyebrow">Subscription Endpoint</div>
+        <h2 style="margin: 8px 0 0; font-size: 1.2rem;">Client URL</h2>
+      </div>
+      <div id="subscription-url" class="endpoint-line">/sub?token=••••••••••••••••••••</div>
+      <div class="row-actions">
+        <button id="copy-url" class="btn-primary" type="button">Copy URL</button>
+        <button id="toggle-token" class="btn-secondary" type="button">Show Token</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-stack" class="toast-stack"></div>
+
+  <script>
+    const state = {
+      tokenVisible: false,
+      subscriptionToken: '',
+      lastStats: null,
+      nextUpdate: null,
+      pollTimer: null,
+      countdownTimer: null,
+      ws: null,
+      isAuthenticated: false
+    };
+
+    const els = {
+      login: document.getElementById('login'),
+      dashboard: document.getElementById('dashboard'),
+      loginForm: document.getElementById('login-form'),
+      tokenInput: document.getElementById('token-input'),
+      loginError: document.getElementById('login-error'),
+      statusText: document.getElementById('status-text'),
+      totalNodes: document.getElementById('total-nodes'),
+      dedupNodes: document.getElementById('dedup-nodes'),
+      onlineNodes: document.getElementById('online-nodes'),
+      countdown: document.getElementById('countdown'),
+      graphFetched: document.getElementById('graph-fetched'),
+      graphDedup: document.getElementById('graph-dedup'),
+      graphPing: document.getElementById('graph-ping'),
+      graphResult: document.getElementById('graph-result'),
+      pingProgress: document.getElementById('ping-progress'),
+      lastUpdate: document.getElementById('last-update'),
+      nextUpdate: document.getElementById('next-update'),
+      statusPill: document.getElementById('status-pill'),
+      settingsForm: document.getElementById('settings-form'),
+      subscriptionUrls: document.getElementById('subscription-urls'),
+      intervalInput: document.getElementById('interval-input'),
+      timeoutInput: document.getElementById('timeout-input'),
+      parallelInput: document.getElementById('parallel-input'),
+      subscriptionUrl: document.getElementById('subscription-url'),
+      copyUrl: document.getElementById('copy-url'),
+      toggleToken: document.getElementById('toggle-token'),
+      updateNow: document.getElementById('update-now'),
+      logout: document.getElementById('logout'),
+      toastStack: document.getElementById('toast-stack')
+    };
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        },
+        ...options
+      });
+
+      let data = null;
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+          data = text;
+        }
+      }
+
+      if (!response.ok) {
+        const message = data && data.message ? data.message : `Request failed: ${response.status}`;
+        throw new Error(message);
+      }
+
+      return data;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      els.toastStack.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function maskToken(token) {
+      return token ? '•'.repeat(Math.min(token.length, 24)) : '••••••••';
+    }
+
+    function endpointUrl() {
+      const token = state.tokenVisible ? state.subscriptionToken : maskToken(state.subscriptionToken);
+      const origin = window.location.origin;
+      return `${origin}/sub?token=${token || maskToken('')}`;
+    }
+
+    function renderEndpoint() {
+      els.subscriptionUrl.textContent = endpointUrl();
+      els.toggleToken.textContent = state.tokenVisible ? 'Hide Token' : 'Show Token';
+    }
+
+    function formatDate(value) {
+      if (!value) {
+        return 'Never';
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      return date.toLocaleString();
+    }
+
+    function formatCountdown(target) {
+      if (!target) {
+        return '--:--:--';
+      }
+      const diff = Math.max(0, target.getTime() - Date.now());
+      const totalSeconds = Math.floor(diff / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      return `${hours}:${minutes}:${seconds}`;
+    }
+
+    function renderStats(stats) {
+      state.lastStats = stats;
+      state.nextUpdate = stats.next_update ? new Date(stats.next_update) : null;
+
+      const removedDupes = Math.max(0, stats.nodes_total - stats.nodes_after_dedup);
+      const removedOffline = Math.max(0, stats.nodes_after_dedup - stats.nodes_after_ping);
+
+      els.totalNodes.textContent = String(stats.nodes_total);
+      els.dedupNodes.textContent = String(stats.nodes_after_dedup);
+      els.onlineNodes.textContent = String(stats.nodes_after_ping);
+      els.graphFetched.textContent = `${stats.nodes_total} nodes`;
+      els.graphDedup.textContent = `-${removedDupes} dupes`;
+      els.graphPing.textContent = `-${removedOffline} offline`;
+      els.graphResult.textContent = `${stats.nodes_after_ping} nodes`;
+      els.lastUpdate.textContent = formatDate(stats.last_update);
+      els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
+      els.countdown.textContent = formatCountdown(state.nextUpdate);
+
+      const updating = Boolean(stats.is_updating);
+      els.statusText.textContent = updating ? 'Update in progress' : 'Ready';
+      els.statusPill.classList.toggle('updating', updating);
+      els.statusPill.lastElementChild.textContent = updating ? 'Updating...' : 'Ready';
+      if (!updating && els.pingProgress.textContent.startsWith('Pinging')) {
+        els.pingProgress.textContent = 'TCP reachability filter';
+      }
+    }
+
+    async function loadConfig() {
+      const config = await api('/api/config');
+      state.subscriptionToken = config.subscription_token;
+      els.subscriptionUrls.value = (config.subscription_urls || []).join('\n');
+      els.intervalInput.value = config.update_interval_minutes;
+      els.timeoutInput.value = config.ping_timeout_ms;
+      els.parallelInput.value = config.max_concurrent_pings;
+      renderEndpoint();
+    }
+
+    async function refreshStats() {
+      const stats = await api('/api/stats');
+      renderStats(stats);
+    }
+
+    function startPolling() {
+      clearInterval(state.pollTimer);
+      clearInterval(state.countdownTimer);
+
+      state.pollTimer = setInterval(async () => {
+        try {
+          await refreshStats();
+        } catch (error) {
+          if (error.message.includes('401')) {
+            showLogin();
+          }
+        }
+      }, 5000);
+
+      state.countdownTimer = setInterval(() => {
+        els.countdown.textContent = formatCountdown(state.nextUpdate);
+      }, 1000);
+    }
+
+    function connectWebSocket() {
+      if (state.ws) {
+        state.ws.close();
+      }
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      state.ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+      state.ws.onmessage = async (event) => {
+        let data = null;
+        try {
+          data = JSON.parse(event.data);
+        } catch (_) {
+          return;
+        }
+
+        if (data.event === 'ping_progress') {
+          els.pingProgress.textContent = `Pinging ${data.done}/${data.total} nodes`;
+        }
+        if (data.event === 'update_complete') {
+          showToast('Update completed');
+          await refreshStats().catch(() => {});
+        }
+        if (data.event === 'update_failed') {
+          showToast(data.message || 'Update failed', 'error');
+        }
+      };
+      state.ws.onclose = () => {
+        if (state.isAuthenticated) {
+          setTimeout(connectWebSocket, 3000);
+        }
+      };
+    }
+
+    async function showDashboard() {
+      state.isAuthenticated = true;
+      els.login.classList.add('hidden');
+      els.dashboard.classList.remove('hidden');
+      await Promise.all([loadConfig(), refreshStats()]);
+      startPolling();
+      connectWebSocket();
+    }
+
+    function showLogin() {
+      state.isAuthenticated = false;
+      if (state.ws) {
+        state.ws.close();
+        state.ws = null;
+      }
+      clearInterval(state.pollTimer);
+      clearInterval(state.countdownTimer);
+      els.dashboard.classList.add('hidden');
+      els.login.classList.remove('hidden');
+    }
+
+    els.loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      els.loginError.textContent = '';
+      try {
+        await api('/api/login', {
+          method: 'POST',
+          body: JSON.stringify({ token: els.tokenInput.value.trim() })
+        });
+        els.tokenInput.value = '';
+        await showDashboard();
+      } catch (error) {
+        els.loginError.textContent = error.message || 'Invalid token';
+      }
+    });
+
+    els.settingsForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        subscription_urls: els.subscriptionUrls.value.split('\n').map(v => v.trim()).filter(Boolean),
+        update_interval_minutes: Number(els.intervalInput.value),
+        ping_timeout_ms: Number(els.timeoutInput.value),
+        max_concurrent_pings: Number(els.parallelInput.value)
+      };
+
+      try {
+        await api('/api/config', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        showToast('Settings saved');
+        await loadConfig();
+        await refreshStats();
+      } catch (error) {
+        showToast(error.message || 'Failed to save settings', 'error');
+      }
+    });
+
+    els.updateNow.addEventListener('click', async () => {
+      try {
+        await api('/api/update-now', { method: 'POST' });
+        showToast('Update started');
+      } catch (error) {
+        showToast(error.message || 'Failed to start update', 'error');
+      }
+    });
+
+    els.copyUrl.addEventListener('click', async () => {
+      try {
+        const url = `${window.location.origin}/sub?token=${state.subscriptionToken}`;
+        await navigator.clipboard.writeText(url);
+        showToast('Subscription URL copied');
+      } catch (_) {
+        showToast('Unable to copy URL', 'error');
+      }
+    });
+
+    els.toggleToken.addEventListener('click', () => {
+      state.tokenVisible = !state.tokenVisible;
+      renderEndpoint();
+    });
+
+    els.logout.addEventListener('click', () => {
+      document.cookie = 'auth_token=; Max-Age=0; Path=/';
+      showLogin();
+      showToast('Logged out');
+    });
+
+    async function bootstrap() {
+      renderEndpoint();
+      try {
+        await refreshStats();
+        await showDashboard();
+      } catch (_) {
+        showLogin();
+      }
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+use std::{env, path::{Path, PathBuf}};
+
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use tokio::{fs, io::AsyncWriteExt};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub web_port: u16,
+    pub admin_token: String,
+    pub subscription_token: String,
+    pub update_interval_minutes: u64,
+    pub ping_timeout_ms: u64,
+    pub max_concurrent_pings: usize,
+    pub subscription_urls: Vec<String>,
+    pub last_update: Option<DateTime<Utc>>,
+    pub nodes_total: usize,
+    pub nodes_after_dedup: usize,
+    pub nodes_after_ping: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicConfig {
+    pub web_port: u16,
+    pub subscription_token: String,
+    pub update_interval_minutes: u64,
+    pub ping_timeout_ms: u64,
+    pub max_concurrent_pings: usize,
+    pub subscription_urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateConfigRequest {
+    pub subscription_urls: Vec<String>,
+    pub update_interval_minutes: u64,
+    pub ping_timeout_ms: u64,
+    pub max_concurrent_pings: usize,
+}
+
+impl AppConfig {
+    pub fn new_default() -> Self {
+        Self {
+            web_port: 8080,
+            admin_token: Uuid::new_v4().to_string(),
+            subscription_token: Uuid::new_v4().to_string(),
+            update_interval_minutes: 60,
+            ping_timeout_ms: 3000,
+            max_concurrent_pings: 100,
+            subscription_urls: Vec::new(),
+            last_update: None,
+            nodes_total: 0,
+            nodes_after_dedup: 0,
+            nodes_after_ping: 0,
+        }
+    }
+
+    pub fn public_view(&self) -> PublicConfig {
+        PublicConfig {
+            web_port: self.web_port,
+            subscription_token: self.subscription_token.clone(),
+            update_interval_minutes: self.update_interval_minutes,
+            ping_timeout_ms: self.ping_timeout_ms,
+            max_concurrent_pings: self.max_concurrent_pings,
+            subscription_urls: self.subscription_urls.clone(),
+        }
+    }
+}
+
+pub fn resolve_config_path(cli_arg: Option<String>) -> PathBuf {
+    if let Some(path) = cli_arg.filter(|value| !value.trim().is_empty()) {
+        return PathBuf::from(path);
+    }
+
+    if let Ok(path) = env::var("CONFIG_PATH") {
+        if !path.trim().is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+
+    PathBuf::from("/opt/xray-sub-manager/config.json")
+}
+
+pub fn cache_path_for(config_path: &Path) -> PathBuf {
+    let parent = config_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    parent.join("subscription.cache")
+}
+
+pub async fn load_or_init_config(path: &Path) -> Result<AppConfig> {
+    if fs::try_exists(path).await.context("failed to check config path")? {
+        let content = fs::read_to_string(path)
+            .await
+            .with_context(|| format!("failed to read config file {}", path.display()))?;
+        let config = serde_json::from_str::<AppConfig>(&content)
+            .with_context(|| format!("failed to parse config file {}", path.display()))?;
+        return Ok(config);
+    }
+
+    let config = AppConfig::new_default();
+    save_config_atomic(path, &config).await?;
+    Ok(config)
+}
+
+pub async fn load_subscription_cache(path: &Path) -> Result<Option<String>> {
+    if !fs::try_exists(path).await.context("failed to check subscription cache path")? {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(path)
+        .await
+        .with_context(|| format!("failed to read cache file {}", path.display()))?;
+    Ok(Some(content))
+}
+
+pub async fn save_subscription_cache(path: &Path, content: &str) -> Result<()> {
+    atomic_write(path, content.as_bytes()).await
+}
+
+pub async fn save_config_atomic(path: &Path, config: &AppConfig) -> Result<()> {
+    let content = serde_json::to_vec_pretty(config).context("failed to serialize config")?;
+    atomic_write(path, &content).await
+}
+
+async fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+
+    let parent = path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let temp_path = parent.join(format!(
+        ".{}.tmp-{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("config"),
+        Uuid::new_v4()
+    ));
+
+    let mut file = fs::File::create(&temp_path)
+        .await
+        .with_context(|| format!("failed to create temp file {}", temp_path.display()))?;
+    file.write_all(bytes)
+        .await
+        .with_context(|| format!("failed to write temp file {}", temp_path.display()))?;
+    file.flush()
+        .await
+        .with_context(|| format!("failed to flush temp file {}", temp_path.display()))?;
+    file.sync_all()
+        .await
+        .with_context(|| format!("failed to sync temp file {}", temp_path.display()))?;
+    drop(file);
+
+    fs::rename(&temp_path, path)
+        .await
+        .with_context(|| format!("failed to rename temp file into {}", path.display()))?;
+
+    Ok(())
+}

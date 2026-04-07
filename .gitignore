@@ -1,0 +1,15 @@
+/target/
+/.idea/
+/.vscode/
+
+# Runtime files
+/config.json
+/subscription.cache
+
+# Environment and local overrides
+/.env
+/.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
