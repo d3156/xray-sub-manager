@@ -181,11 +181,13 @@
       display: grid;
       gap: 12px;
       margin-bottom: 16px;
+      overflow: visible;
     }
 
     .graph-chain {
       display: grid;
       gap: 12px;
+      overflow: visible;
     }
 
     .graph-node {
@@ -206,35 +208,28 @@
 
     .graph-arrow {
       position: relative;
-      min-height: 42px;
-      color: var(--text-muted);
-      overflow: hidden;
+      min-height: 46px;
+      overflow: visible;
+      pointer-events: none;
     }
 
     .graph-arrow::before {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      transform: translateX(-50%);
-      background: linear-gradient(180deg, rgba(0, 212, 255, 0.1), rgba(180, 79, 255, 0.9), rgba(0, 255, 136, 0.14));
-      box-shadow: 0 0 16px rgba(0, 212, 255, 0.28);
+      content: none;
     }
 
     .graph-arrow::after {
-      content: "";
+      content: ">";
       position: absolute;
       left: 50%;
-      bottom: 1px;
-      width: 11px;
-      height: 11px;
-      border-right: 2px solid var(--neon-cyan);
-      border-bottom: 2px solid var(--neon-cyan);
-      transform: translateX(-50%) rotate(45deg);
-      box-shadow: 2px 2px 12px rgba(0, 212, 255, 0.38);
-      animation: arrowPulseVertical 1.4s ease-in-out infinite;
+      top: 0;
+      font-size: 1.7rem;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 16px rgba(0, 212, 255, 0.65);
+      transform: translateX(-50%) rotate(90deg);
+      animation: arrowTravelVertical 1.35s ease-in-out infinite;
+      will-change: transform, opacity;
     }
 
     .graph-title {
@@ -442,24 +437,11 @@
         min-height: auto;
       }
 
-      .graph-arrow::before {
-        left: 4px;
-        right: 10px;
-        top: 50%;
-        bottom: auto;
-        width: auto;
-        height: 2px;
-        transform: translateY(-50%);
-        background: linear-gradient(90deg, rgba(0, 212, 255, 0.1), rgba(180, 79, 255, 0.9), rgba(0, 255, 136, 0.14));
-      }
-
       .graph-arrow::after {
-        left: auto;
-        right: 2px;
-        bottom: auto;
+        left: 4px;
         top: 50%;
-        transform: translateY(-50%) rotate(-45deg);
-        animation: arrowPulseHorizontal 1.4s ease-in-out infinite;
+        transform: translateY(-50%);
+        animation: arrowTravelHorizontal 1.35s ease-in-out infinite;
       }
 
       .main-grid {
@@ -467,14 +449,18 @@
       }
     }
 
-    @keyframes arrowPulseVertical {
-      0%, 100% { transform: translateX(-50%) rotate(45deg); opacity: 0.8; }
-      50% { transform: translateX(-50%) translateY(2px) rotate(45deg); opacity: 1; }
+    @keyframes arrowTravelVertical {
+      0% { transform: translateX(-50%) translateY(0) rotate(90deg); opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateX(-50%) translateY(18px) rotate(90deg); opacity: 0; }
     }
 
-    @keyframes arrowPulseHorizontal {
-      0%, 100% { transform: translateY(-50%) rotate(-45deg); opacity: 0.8; }
-      50% { transform: translateY(-50%) translateX(2px) rotate(-45deg); opacity: 1; }
+    @keyframes arrowTravelHorizontal {
+      0% { transform: translateY(-50%) translateX(0); opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateY(-50%) translateX(28px); opacity: 0; }
     }
   </style>
 </head>
