@@ -1,10 +1,10 @@
 use std::{env, path::{Path, PathBuf}, process::Stdio, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
 
 use anyhow::{anyhow, Context, Result};
+use reqwest::{Proxy, StatusCode};
 use serde_json::{json, Map, Value};
 use tokio::{
     fs,
-    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     process::{Child, Command},
     sync::Semaphore,
@@ -16,8 +16,7 @@ use uuid::Uuid;
 
 use crate::{parser::{Node, Protocol}, pinger::ProgressCallback};
 
-const PROBE_HOST: [u8; 4] = [1, 1, 1, 1];
-const PROBE_PORT: u16 = 443;
+const DEFAULT_PROBE_URL: &str = "https://www.gstatic.com/generate_204";
 
 pub async fn probe_tunnels(
     nodes: Vec<Node>,
@@ -118,8 +117,9 @@ async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> 
         }
     }
 
+    let probe_url = env::var("TUNNEL_PROBE_URL").unwrap_or_else(|_| DEFAULT_PROBE_URL.to_string());
     let started_at = Instant::now();
-    let measure_result = timeout(probe_timeout, measure_socks_connect(&local_addr)).await;
+    let measure_result = timeout(probe_timeout, measure_tunnel_http_get(&local_addr, &probe_url)).await;
     match measure_result {
         Ok(Ok(())) => {
             node.tunnel_ok = true;
@@ -167,75 +167,25 @@ async fn wait_for_local_proxy(child: &mut Child, local_addr: &str) -> Result<()>
     }
 }
 
-async fn measure_socks_connect(local_addr: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(local_addr)
+async fn measure_tunnel_http_get(local_addr: &str, probe_url: &str) -> Result<()> {
+    let proxy_url = format!("socks5h://{local_addr}");
+    let client = reqwest::Client::builder()
+        .proxy(Proxy::all(&proxy_url).with_context(|| format!("failed to configure proxy {proxy_url}"))?)
+        .build()
+        .context("failed to build HTTP client for tunnel probe")?;
+
+    let response = client
+        .get(probe_url)
+        .send()
         .await
-        .with_context(|| format!("failed to connect to local proxy {local_addr}"))?;
+        .with_context(|| format!("failed to GET tunnel probe URL {probe_url}"))?;
 
-    stream
-        .write_all(&[0x05, 0x01, 0x00])
-        .await
-        .context("failed to send SOCKS5 greeting")?;
-
-    let mut method = [0u8; 2];
-    stream
-        .read_exact(&mut method)
-        .await
-        .context("failed to read SOCKS5 greeting response")?;
-    if method != [0x05, 0x00] {
-        return Err(anyhow!("SOCKS5 proxy rejected no-auth method"));
-    }
-
-    let request = [
-        0x05,
-        0x01,
-        0x00,
-        0x01,
-        PROBE_HOST[0],
-        PROBE_HOST[1],
-        PROBE_HOST[2],
-        PROBE_HOST[3],
-        (PROBE_PORT >> 8) as u8,
-        (PROBE_PORT & 0xff) as u8,
-    ];
-    stream
-        .write_all(&request)
-        .await
-        .context("failed to send SOCKS5 connect request")?;
-
-    let mut header = [0u8; 4];
-    stream
-        .read_exact(&mut header)
-        .await
-        .context("failed to read SOCKS5 connect response")?;
-    if header[0] != 0x05 {
-        return Err(anyhow!("invalid SOCKS5 version in connect response"));
-    }
-    if header[1] != 0x00 {
-        return Err(anyhow!("SOCKS5 connect failed with reply code {}", header[1]));
-    }
-
-    consume_bound_address(&mut stream, header[3]).await?;
-    Ok(())
-}
-
-async fn consume_bound_address(stream: &mut TcpStream, atyp: u8) -> Result<()> {
-    match atyp {
-        0x01 => {
-            let mut buf = [0u8; 6];
-            stream.read_exact(&mut buf).await.context("failed to read IPv4 bind address")?;
-        }
-        0x03 => {
-            let mut len = [0u8; 1];
-            stream.read_exact(&mut len).await.context("failed to read domain length")?;
-            let mut buf = vec![0u8; len[0] as usize + 2];
-            stream.read_exact(&mut buf).await.context("failed to read domain bind address")?;
-        }
-        0x04 => {
-            let mut buf = [0u8; 18];
-            stream.read_exact(&mut buf).await.context("failed to read IPv6 bind address")?;
-        }
-        _ => return Err(anyhow!("unsupported SOCKS5 address type {atyp}")),
+    if response.status() != StatusCode::NO_CONTENT && !response.status().is_success() {
+        return Err(anyhow!(
+            "tunnel probe GET {} returned unexpected status {}",
+            probe_url,
+            response.status()
+        ));
     }
 
     Ok(())
