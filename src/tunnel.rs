@@ -266,18 +266,6 @@ fn tunnel_work_dir() -> PathBuf {
 
 fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
     let outbound = build_outbound(node)?;
-    let modem_interface = std::env::var("MODEM_INTERFACE")
-        .unwrap_or_else(|_| "enx020d0c073330".to_string());
-
-    let mut route = Map::new();
-    route.insert("auto_detect_interface".to_string(), Value::Bool(true));
-    route.insert("final".to_string(), Value::String("proxy".to_string()));
-    if !modem_interface.is_empty() {
-        route.insert(
-            "default_interface".to_string(),
-            Value::String(modem_interface),
-        );
-    }
 
     Ok(json!({
         "log": { "disabled": true },
@@ -290,15 +278,23 @@ fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
             }
         ],
         "outbounds": [outbound],
-        "route": route
+        "route": {
+            "final": "proxy"
+        }
     }))
 }
 
 fn build_outbound(node: &Node) -> Result<Value> {
     let mut outbound = Map::new();
+    let modem_interface = std::env::var("MODEM_INTERFACE")
+        .unwrap_or_else(|_| "enx020d0c073330".to_string());
+
     outbound.insert("tag".to_string(), Value::String("proxy".to_string()));
     outbound.insert("server".to_string(), Value::String(node.host.clone()));
     outbound.insert("server_port".to_string(), Value::Number(node.port.into()));
+    if !modem_interface.is_empty() {
+        outbound.insert("bind_interface".to_string(), Value::String(modem_interface));
+    }
 
     match node.protocol {
         Protocol::Vmess => {
