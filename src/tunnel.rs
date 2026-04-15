@@ -266,6 +266,19 @@ fn tunnel_work_dir() -> PathBuf {
 
 fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
     let outbound = build_outbound(node)?;
+    let modem_interface = std::env::var("MODEM_INTERFACE")
+        .unwrap_or_else(|_| "enx020d0c073330".to_string());
+
+    let mut route = Map::new();
+    route.insert("auto_detect_interface".to_string(), Value::Bool(true));
+    route.insert("final".to_string(), Value::String("proxy".to_string()));
+    if !modem_interface.is_empty() {
+        route.insert(
+            "default_interface".to_string(),
+            Value::String(modem_interface),
+        );
+    }
+
     Ok(json!({
         "log": { "disabled": true },
         "inbounds": [
@@ -277,10 +290,7 @@ fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
             }
         ],
         "outbounds": [outbound],
-        "route": {
-            "auto_detect_interface": true,
-            "final": "proxy"
-        }
+        "route": route
     }))
 }
 
