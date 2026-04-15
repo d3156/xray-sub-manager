@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use crate::{config::{save_config_atomic, AppConfig, UpdateConfigRequest}, scheduler::{stats_snapshot, subscription_snapshot, SchedulerHandle, SharedState, UpdateEvent}};
+use crate::{config::{save_config_atomic, AppConfig, UpdateConfigRequest}, encoder::encode_subscription, scheduler::{stats_snapshot, subscription_snapshot, SchedulerHandle, SharedState, UpdateEvent}};
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
 
@@ -27,6 +27,7 @@ struct LoginRequest {
 #[derive(Debug, Deserialize)]
 struct SubscriptionQuery {
     token: String,
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -42,6 +43,7 @@ struct StatsResponse {
     nodes_total: usize,
     nodes_after_dedup: usize,
     nodes_after_ping: usize,
+    nodes_after_tunnel: usize,
     is_updating: bool,
 }
 
@@ -116,6 +118,8 @@ async fn update_config(
         || payload.ping_timeout_ms > 30_000
         || payload.max_concurrent_pings == 0
         || payload.max_concurrent_pings > 500
+        || payload.max_concurrent_tunnels == 0
+        || payload.max_concurrent_tunnels > 500
     {
         return (
             StatusCode::BAD_REQUEST,
@@ -138,7 +142,8 @@ async fn update_config(
         let current = state.shared.config.read().await.clone();
         let should_refresh = current.subscription_urls != sanitized_urls
             || current.ping_timeout_ms != payload.ping_timeout_ms
-            || current.max_concurrent_pings != payload.max_concurrent_pings;
+            || current.max_concurrent_pings != payload.max_concurrent_pings
+            || current.max_concurrent_tunnels != payload.max_concurrent_tunnels;
         (
             AppConfig {
                 web_port: current.web_port,
@@ -147,11 +152,13 @@ async fn update_config(
                 update_interval_minutes: payload.update_interval_minutes,
                 ping_timeout_ms: payload.ping_timeout_ms,
                 max_concurrent_pings: payload.max_concurrent_pings,
+                max_concurrent_tunnels: payload.max_concurrent_tunnels,
                 subscription_urls: sanitized_urls,
                 last_update: current.last_update,
                 nodes_total: current.nodes_total,
                 nodes_after_dedup: current.nodes_after_dedup,
                 nodes_after_ping: current.nodes_after_ping,
+                nodes_after_tunnel: current.nodes_after_tunnel,
             },
             should_refresh,
         )
@@ -205,6 +212,7 @@ async fn get_stats(State(state): State<AppState>, headers: HeaderMap) -> impl In
             nodes_total: config.nodes_total,
             nodes_after_dedup: config.nodes_after_dedup,
             nodes_after_ping: config.nodes_after_ping,
+            nodes_after_tunnel: config.nodes_after_tunnel,
             is_updating,
         })
         .into_response(),
@@ -247,9 +255,12 @@ async fn get_subscription(
     }
     drop(config);
 
-    let Some(subscription) = subscription_snapshot(&state.shared).await else {
+    let Some(nodes) = subscription_snapshot(&state.shared).await else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
+
+    let limit = query.limit.unwrap_or(nodes.len()).min(nodes.len());
+    let subscription = encode_subscription(&nodes[..limit]);
 
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"));

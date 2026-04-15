@@ -1,8 +1,13 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Context, Result};
-use base64::{engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD}, Engine};
-use percent_encoding::{utf8_percent_encode, percent_decode_str, AsciiSet, CONTROLS, NON_ALPHANUMERIC};
+use base64::{
+    engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD},
+    Engine,
+};
+use percent_encoding::{
+    percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS, NON_ALPHANUMERIC,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tracing::warn;
@@ -55,6 +60,10 @@ pub struct Node {
     pub original_uri: String,
     pub ping_ok: bool,
     pub ping_ms: Option<u64>,
+    #[serde(default)]
+    pub tunnel_ok: bool,
+    #[serde(default)]
+    pub tunnel_ms: Option<u64>,
 }
 
 pub fn parse_subscription(body: &str) -> Result<Vec<Node>> {
@@ -151,7 +160,8 @@ fn parse_vmess_uri(original_uri: &str, encoded: &str) -> Result<Node> {
         .filter(|value| !value.is_empty())
         .ok_or_else(|| anyhow!("vmess node missing add field"))?
         .to_string();
-    let port = parse_port(value.get("port")).ok_or_else(|| anyhow!("vmess node missing port field"))?;
+    let port =
+        parse_port(value.get("port")).ok_or_else(|| anyhow!("vmess node missing port field"))?;
     let raw_name = value
         .get("ps")
         .and_then(Value::as_str)
@@ -186,11 +196,14 @@ fn parse_vmess_uri(original_uri: &str, encoded: &str) -> Result<Node> {
         original_uri: original_uri.to_string(),
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     })
 }
 
 fn parse_standard_uri(original_uri: &str, protocol: Protocol) -> Result<Node> {
-    let url = url::Url::parse(original_uri).with_context(|| format!("invalid {} URI", protocol.as_str()))?;
+    let url = url::Url::parse(original_uri)
+        .with_context(|| format!("invalid {} URI", protocol.as_str()))?;
     let host = url
         .host_str()
         .filter(|value| !value.is_empty())
@@ -203,7 +216,9 @@ fn parse_standard_uri(original_uri: &str, protocol: Protocol) -> Result<Node> {
         params.insert(key.into_owned(), value.into_owned());
     }
 
-    let username = percent_decode_str(url.username()).decode_utf8_lossy().to_string();
+    let username = percent_decode_str(url.username())
+        .decode_utf8_lossy()
+        .to_string();
     let password = url
         .password()
         .map(|value| percent_decode_str(value).decode_utf8_lossy().to_string());
@@ -249,6 +264,8 @@ fn parse_standard_uri(original_uri: &str, protocol: Protocol) -> Result<Node> {
         original_uri: original_uri.to_string(),
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     })
 }
 
@@ -256,17 +273,22 @@ fn parse_shadowsocks_uri(original_uri: &str, content: &str) -> Result<Node> {
     let (without_fragment, raw_name) = split_fragment(content);
     let (main, query) = split_query(without_fragment);
     let mut params = parse_query_params(query);
-    let (host, port, method, password) = if let Some((cred_part, server_part)) = main.rsplit_once('@') {
-        let decoded_credentials = String::from_utf8(decode_base64_flexible(cred_part).context("failed to decode ss credentials")?)
-            .context("ss credential payload is not valid UTF-8")?;
+    let (host, port, method, password) = if let Some((cred_part, server_part)) =
+        main.rsplit_once('@')
+    {
+        let decoded_credentials = String::from_utf8(
+            decode_base64_flexible(cred_part).context("failed to decode ss credentials")?,
+        )
+        .context("ss credential payload is not valid UTF-8")?;
         let (method, password) = decoded_credentials
             .split_once(':')
             .ok_or_else(|| anyhow!("invalid ss credential payload"))?;
         let (host, port) = parse_host_port(server_part)?;
         (host, port, method.to_string(), password.to_string())
     } else {
-        let decoded_full = String::from_utf8(decode_base64_flexible(main).context("failed to decode ss payload")?)
-            .context("ss payload is not valid UTF-8")?;
+        let decoded_full =
+            String::from_utf8(decode_base64_flexible(main).context("failed to decode ss payload")?)
+                .context("ss payload is not valid UTF-8")?;
         let (credentials, server_part) = decoded_full
             .rsplit_once('@')
             .ok_or_else(|| anyhow!("invalid ss URI payload"))?;
@@ -290,12 +312,15 @@ fn parse_shadowsocks_uri(original_uri: &str, content: &str) -> Result<Node> {
         original_uri: original_uri.to_string(),
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     })
 }
 
 fn parse_shadowsocksr_uri(original_uri: &str, content: &str) -> Result<Node> {
-    let decoded = String::from_utf8(decode_base64_flexible(content).context("failed to decode ssr payload")?)
-        .context("ssr payload is not valid UTF-8")?;
+    let decoded =
+        String::from_utf8(decode_base64_flexible(content).context("failed to decode ssr payload")?)
+            .context("ssr payload is not valid UTF-8")?;
 
     let (main, query) = decoded.split_once("/?").unwrap_or((&decoded, ""));
     let fields: Vec<&str> = main.split(':').collect();
@@ -310,8 +335,10 @@ fn parse_shadowsocksr_uri(original_uri: &str, content: &str) -> Result<Node> {
     let protocol_name = fields[2].to_string();
     let method = fields[3].to_string();
     let obfs = fields[4].to_string();
-    let password = String::from_utf8(decode_base64_flexible(fields[5]).context("failed to decode ssr password")?)
-        .context("ssr password is not valid UTF-8")?;
+    let password = String::from_utf8(
+        decode_base64_flexible(fields[5]).context("failed to decode ssr password")?,
+    )
+    .context("ssr password is not valid UTF-8")?;
 
     let mut params = HashMap::new();
     params.insert("protocol".to_string(), protocol_name);
@@ -339,6 +366,8 @@ fn parse_shadowsocksr_uri(original_uri: &str, content: &str) -> Result<Node> {
         original_uri: original_uri.to_string(),
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     })
 }
 
@@ -358,7 +387,9 @@ fn parse_sing_box(outbounds: &[Value]) -> Result<Vec<Node>> {
     }
 
     if nodes.is_empty() {
-        return Err(anyhow!("sing-box subscription did not contain supported outbounds"));
+        return Err(anyhow!(
+            "sing-box subscription did not contain supported outbounds"
+        ));
     }
 
     Ok(nodes)
@@ -379,7 +410,9 @@ fn parse_sip008(servers: &[Value]) -> Result<Vec<Node>> {
     }
 
     if nodes.is_empty() {
-        return Err(anyhow!("sip008 subscription did not contain supported servers"));
+        return Err(anyhow!(
+            "sip008 subscription did not contain supported servers"
+        ));
     }
 
     Ok(nodes)
@@ -387,9 +420,12 @@ fn parse_sip008(servers: &[Value]) -> Result<Vec<Node>> {
 
 fn parse_sip008_server(object: &Map<String, Value>) -> Result<Node> {
     let host = get_string(object, "server").ok_or_else(|| anyhow!("sip008 server missing host"))?;
-    let port = get_u16(object, "server_port").ok_or_else(|| anyhow!("sip008 server missing port"))?;
-    let method = get_string(object, "method").ok_or_else(|| anyhow!("sip008 server missing method"))?;
-    let password = get_string(object, "password").ok_or_else(|| anyhow!("sip008 server missing password"))?;
+    let port =
+        get_u16(object, "server_port").ok_or_else(|| anyhow!("sip008 server missing port"))?;
+    let method =
+        get_string(object, "method").ok_or_else(|| anyhow!("sip008 server missing method"))?;
+    let password =
+        get_string(object, "password").ok_or_else(|| anyhow!("sip008 server missing password"))?;
     let raw_name = get_string(object, "remarks").unwrap_or_else(|| "Unnamed".to_string());
 
     let mut params = collect_scalar_fields(Some(object));
@@ -407,11 +443,14 @@ fn parse_sip008_server(object: &Map<String, Value>) -> Result<Node> {
         original_uri,
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     })
 }
 
 fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> {
-    let outbound_type = get_string(object, "type").ok_or_else(|| anyhow!("sing-box outbound missing type"))?;
+    let outbound_type =
+        get_string(object, "type").ok_or_else(|| anyhow!("sing-box outbound missing type"))?;
     let tag = get_string(object, "tag").unwrap_or_else(|| "Unnamed".to_string());
     let host = match get_string(object, "server") {
         Some(host) => host,
@@ -430,7 +469,10 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
     let service_name = transport.and_then(|value| get_string(value, "service_name"));
     let mode = transport.and_then(|value| get_string(value, "mode"));
     let header_type = transport.and_then(extract_header_type);
-    let security = if tls.and_then(|tls_obj| get_bool(tls_obj, "enabled")).unwrap_or(false) {
+    let security = if tls
+        .and_then(|tls_obj| get_bool(tls_obj, "enabled"))
+        .unwrap_or(false)
+    {
         "tls".to_string()
     } else {
         get_string(object, "security").unwrap_or_else(|| "none".to_string())
@@ -483,7 +525,9 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
 
     let original_uri = match protocol {
         Protocol::Vmess => {
-            let id = get_string(object, "uuid").or_else(|| get_string(object, "id")).ok_or_else(|| anyhow!("vmess outbound missing uuid"))?;
+            let id = get_string(object, "uuid")
+                .or_else(|| get_string(object, "id"))
+                .ok_or_else(|| anyhow!("vmess outbound missing uuid"))?;
             let aid = get_string(object, "alter_id").unwrap_or_else(|| "0".to_string());
             params.insert("id".to_string(), id.clone());
             params.insert("aid".to_string(), aid.clone());
@@ -495,23 +539,46 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
             vmess_payload.insert("port".to_string(), Value::String(port.to_string()));
             vmess_payload.insert("id".to_string(), Value::String(id));
             vmess_payload.insert("aid".to_string(), Value::String(aid));
-            vmess_payload.insert("scy".to_string(), Value::String(get_string(object, "security").unwrap_or_else(|| "auto".to_string())));
-            vmess_payload.insert("net".to_string(), Value::String(network.clone().unwrap_or_else(|| "tcp".to_string())));
-            vmess_payload.insert("type".to_string(), Value::String(header_type.clone().unwrap_or_else(|| "none".to_string())));
-            vmess_payload.insert("host".to_string(), Value::String(host_header.clone().unwrap_or_default()));
-            vmess_payload.insert("path".to_string(), Value::String(path.clone().unwrap_or_default()));
-            vmess_payload.insert("tls".to_string(), Value::String(if security == "tls" { "tls" } else { "" }.to_string()));
+            vmess_payload.insert(
+                "scy".to_string(),
+                Value::String(get_string(object, "security").unwrap_or_else(|| "auto".to_string())),
+            );
+            vmess_payload.insert(
+                "net".to_string(),
+                Value::String(network.clone().unwrap_or_else(|| "tcp".to_string())),
+            );
+            vmess_payload.insert(
+                "type".to_string(),
+                Value::String(header_type.clone().unwrap_or_else(|| "none".to_string())),
+            );
+            vmess_payload.insert(
+                "host".to_string(),
+                Value::String(host_header.clone().unwrap_or_default()),
+            );
+            vmess_payload.insert(
+                "path".to_string(),
+                Value::String(path.clone().unwrap_or_default()),
+            );
+            vmess_payload.insert(
+                "tls".to_string(),
+                Value::String(if security == "tls" { "tls" } else { "" }.to_string()),
+            );
             if let Some(sni) = sni.clone() {
                 vmess_payload.insert("sni".to_string(), Value::String(sni));
             }
 
             format!(
                 "vmess://{}",
-                STANDARD.encode(serde_json::to_string(&vmess_payload).context("failed to serialize vmess JSON")?)
+                STANDARD.encode(
+                    serde_json::to_string(&vmess_payload)
+                        .context("failed to serialize vmess JSON")?
+                )
             )
         }
         Protocol::Vless => {
-            let id = get_string(object, "uuid").or_else(|| get_string(object, "id")).ok_or_else(|| anyhow!("vless outbound missing uuid"))?;
+            let id = get_string(object, "uuid")
+                .or_else(|| get_string(object, "id"))
+                .ok_or_else(|| anyhow!("vless outbound missing uuid"))?;
             params.insert("id".to_string(), id.clone());
 
             let mut query = HashMap::new();
@@ -546,7 +613,8 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
             build_standard_uri("vless", &id, None, &host, port, &query, &tag)
         }
         Protocol::Trojan => {
-            let password = get_string(object, "password").ok_or_else(|| anyhow!("trojan outbound missing password"))?;
+            let password = get_string(object, "password")
+                .ok_or_else(|| anyhow!("trojan outbound missing password"))?;
             params.insert("password".to_string(), password.clone());
 
             let mut query = HashMap::new();
@@ -568,14 +636,17 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
             build_standard_uri("trojan", &password, None, &host, port, &query, &tag)
         }
         Protocol::Shadowsocks => {
-            let method = get_string(object, "method").ok_or_else(|| anyhow!("shadowsocks outbound missing method"))?;
-            let password = get_string(object, "password").ok_or_else(|| anyhow!("shadowsocks outbound missing password"))?;
+            let method = get_string(object, "method")
+                .ok_or_else(|| anyhow!("shadowsocks outbound missing method"))?;
+            let password = get_string(object, "password")
+                .ok_or_else(|| anyhow!("shadowsocks outbound missing password"))?;
             params.insert("method".to_string(), method.clone());
             params.insert("password".to_string(), password.clone());
             build_ss_uri(&host, port, &method, &password, &params, &tag)
         }
         Protocol::Hysteria2 => {
-            let password = get_string(object, "password").ok_or_else(|| anyhow!("hysteria2 outbound missing password"))?;
+            let password = get_string(object, "password")
+                .ok_or_else(|| anyhow!("hysteria2 outbound missing password"))?;
             params.insert("password".to_string(), password.clone());
 
             let mut query = HashMap::new();
@@ -596,8 +667,10 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
             build_standard_uri("hysteria2", &password, None, &host, port, &query, &tag)
         }
         Protocol::Tuic => {
-            let uuid = get_string(object, "uuid").ok_or_else(|| anyhow!("tuic outbound missing uuid"))?;
-            let password = get_string(object, "password").ok_or_else(|| anyhow!("tuic outbound missing password"))?;
+            let uuid =
+                get_string(object, "uuid").ok_or_else(|| anyhow!("tuic outbound missing uuid"))?;
+            let password = get_string(object, "password")
+                .ok_or_else(|| anyhow!("tuic outbound missing password"))?;
             params.insert("uuid".to_string(), uuid.clone());
             params.insert("password".to_string(), password.clone());
 
@@ -629,11 +702,16 @@ fn parse_sing_box_outbound(object: &Map<String, Value>) -> Result<Option<Node>> 
         original_uri,
         ping_ok: false,
         ping_ms: None,
+        tunnel_ok: false,
+        tunnel_ms: None,
     }))
 }
 
 fn get_string(object: &Map<String, Value>, key: &str) -> Option<String> {
-    object.get(key).and_then(stringify_value).filter(|value| !value.is_empty())
+    object
+        .get(key)
+        .and_then(stringify_value)
+        .filter(|value| !value.is_empty())
 }
 
 fn get_u16(object: &Map<String, Value>, key: &str) -> Option<u16> {
@@ -665,7 +743,11 @@ fn flatten_value(prefix: &str, value: Option<&Value>, params: &mut HashMap<Strin
             }
         }
         Value::Array(items) => {
-            let joined = items.iter().filter_map(stringify_value).collect::<Vec<_>>().join(",");
+            let joined = items
+                .iter()
+                .filter_map(stringify_value)
+                .collect::<Vec<_>>()
+                .join(",");
             if !joined.is_empty() {
                 params.insert(prefix.to_string(), joined);
             }
@@ -683,7 +765,13 @@ fn stringify_value(value: &Value) -> Option<String> {
         Value::String(value) => Some(value.clone()),
         Value::Number(value) => Some(value.to_string()),
         Value::Bool(value) => Some(value.to_string()),
-        Value::Array(items) => Some(items.iter().filter_map(stringify_value).collect::<Vec<_>>().join(",")),
+        Value::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(stringify_value)
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
         _ => None,
     }
 }
@@ -784,7 +872,14 @@ fn build_standard_uri(
     uri
 }
 
-fn build_ss_uri(host: &str, port: u16, method: &str, password: &str, params: &HashMap<String, String>, tag: &str) -> String {
+fn build_ss_uri(
+    host: &str,
+    port: u16,
+    method: &str,
+    password: &str,
+    params: &HashMap<String, String>,
+    tag: &str,
+) -> String {
     let credentials = STANDARD.encode(format!("{method}:{password}"));
     let mut uri = format!("ss://{credentials}@{host}:{port}");
 
@@ -875,8 +970,12 @@ fn decode_possible_base64_list(value: &str) -> Result<Option<String>> {
         Ok(decoded) => decoded,
         Err(_) => return Ok(None),
     };
-    let decoded_text = String::from_utf8(decoded).context("decoded base64 payload is not valid UTF-8")?;
-    if decoded_text.lines().any(|line| has_supported_prefix(line.trim())) {
+    let decoded_text =
+        String::from_utf8(decoded).context("decoded base64 payload is not valid UTF-8")?;
+    if decoded_text
+        .lines()
+        .any(|line| has_supported_prefix(line.trim()))
+    {
         return Ok(Some(decoded_text));
     }
 

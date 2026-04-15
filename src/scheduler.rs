@@ -6,14 +6,14 @@ use serde::Serialize;
 use tokio::{sync::{broadcast, mpsc, Mutex, RwLock}, task::JoinHandle, time::{sleep, Duration}};
 use tracing::{error, info, warn};
 
-use crate::{config::{self, AppConfig}, dedup::dedup_nodes, encoder::encode_subscription, fetcher::fetch_all, parser, pinger::{ping_nodes, ProgressCallback}, renamer::rename_nodes};
+use crate::{config::{self, AppConfig}, dedup::dedup_nodes, fetcher::fetch_all, parser::{self, Node}, pinger::{ping_nodes, ProgressCallback}, renamer::rename_nodes, tunnel::probe_tunnels};
 
 #[derive(Clone)]
 pub struct SharedState {
     pub config_path: PathBuf,
     pub subscription_cache_path: PathBuf,
     pub config: Arc<RwLock<AppConfig>>,
-    pub subscription_cache: Arc<RwLock<Option<String>>>,
+    pub nodes_cache: Arc<RwLock<Option<Vec<Node>>>>,
     pub next_update: Arc<RwLock<Option<DateTime<Utc>>>>,
     pub is_updating: Arc<AtomicBool>,
     pub update_lock: Arc<Mutex<()>>,
@@ -26,7 +26,7 @@ impl SharedState {
         config_path: PathBuf,
         subscription_cache_path: PathBuf,
         config: AppConfig,
-        cached_subscription: Option<String>,
+        cached_subscription: Option<Vec<Node>>,
         events_tx: broadcast::Sender<UpdateEvent>,
         http_client: reqwest::Client,
     ) -> Self {
@@ -43,7 +43,7 @@ impl SharedState {
             config_path,
             subscription_cache_path,
             config: Arc::new(RwLock::new(config)),
-            subscription_cache: Arc::new(RwLock::new(cached_subscription)),
+            nodes_cache: Arc::new(RwLock::new(cached_subscription)),
             next_update: Arc::new(RwLock::new(next_update)),
             is_updating: Arc::new(AtomicBool::new(false)),
             update_lock: Arc::new(Mutex::new(())),
@@ -67,6 +67,8 @@ pub struct UpdateEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nodes_after_ping: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub nodes_after_tunnel: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
@@ -79,11 +81,25 @@ impl UpdateEvent {
             nodes_total: None,
             nodes_after_dedup: None,
             nodes_after_ping: None,
+            nodes_after_tunnel: None,
             message: None,
         }
     }
 
-    fn update_complete(nodes_total: usize, nodes_after_dedup: usize, nodes_after_ping: usize) -> Self {
+    fn tunnel_progress(done: usize, total: usize) -> Self {
+        Self {
+            event: "tunnel_progress".to_string(),
+            done: Some(done),
+            total: Some(total),
+            nodes_total: None,
+            nodes_after_dedup: None,
+            nodes_after_ping: None,
+            nodes_after_tunnel: None,
+            message: None,
+        }
+    }
+
+    fn update_complete(nodes_total: usize, nodes_after_dedup: usize, nodes_after_ping: usize, nodes_after_tunnel: usize) -> Self {
         Self {
             event: "update_complete".to_string(),
             done: None,
@@ -91,6 +107,7 @@ impl UpdateEvent {
             nodes_total: Some(nodes_total),
             nodes_after_dedup: Some(nodes_after_dedup),
             nodes_after_ping: Some(nodes_after_ping),
+            nodes_after_tunnel: Some(nodes_after_tunnel),
             message: None,
         }
     }
@@ -103,6 +120,7 @@ impl UpdateEvent {
             nodes_total: None,
             nodes_after_dedup: None,
             nodes_after_ping: None,
+            nodes_after_tunnel: None,
             message: Some("Update started".to_string()),
         }
     }
@@ -115,6 +133,7 @@ impl UpdateEvent {
             nodes_total: None,
             nodes_after_dedup: None,
             nodes_after_ping: None,
+            nodes_after_tunnel: None,
             message: Some(message),
         }
     }
@@ -199,7 +218,7 @@ pub fn spawn_scheduler(shared: SharedState) -> (SchedulerHandle, JoinHandle<()>)
 }
 
 async fn initial_next_run(shared: &SharedState) -> DateTime<Utc> {
-    let has_cache = shared.subscription_cache.read().await.is_some();
+    let has_cache = shared.nodes_cache.read().await.is_some();
     if !has_cache {
         return Utc::now();
     }
@@ -264,7 +283,7 @@ pub async fn run_update_cycle(shared: SharedState) -> Result<()> {
             let _ = event_sender.send(UpdateEvent::ping_progress(done, total));
         });
 
-        let mut online_nodes = ping_nodes(
+        let online_nodes = ping_nodes(
             deduped_nodes,
             Duration::from_millis(config_snapshot.ping_timeout_ms),
             config_snapshot.max_concurrent_pings,
@@ -272,13 +291,26 @@ pub async fn run_update_cycle(shared: SharedState) -> Result<()> {
         ).await;
         let nodes_after_ping = online_nodes.len();
 
-        rename_nodes(&mut online_nodes);
-        let encoded_subscription = encode_subscription(&online_nodes);
-        config::save_subscription_cache(&shared.subscription_cache_path, &encoded_subscription).await?;
+        let event_sender = shared.events_tx.clone();
+        let tunnel_progress_callback: ProgressCallback = Arc::new(move |done, total| {
+            let _ = event_sender.send(UpdateEvent::tunnel_progress(done, total));
+        });
+
+        let mut tunnel_nodes = probe_tunnels(
+            online_nodes,
+            Duration::from_millis(config_snapshot.ping_timeout_ms),
+            config_snapshot.max_concurrent_tunnels,
+            Some(tunnel_progress_callback),
+        ).await;
+        tunnel_nodes.sort_by_key(|node| node.tunnel_ms.unwrap_or(u64::MAX));
+        let nodes_after_tunnel = tunnel_nodes.len();
+
+        rename_nodes(&mut tunnel_nodes);
+        config::save_nodes_cache(&shared.subscription_cache_path, &tunnel_nodes).await?;
 
         {
-            let mut cache = shared.subscription_cache.write().await;
-            *cache = Some(encoded_subscription);
+            let mut cache = shared.nodes_cache.write().await;
+            *cache = Some(tunnel_nodes);
         }
 
         let now = Utc::now();
@@ -288,6 +320,7 @@ pub async fn run_update_cycle(shared: SharedState) -> Result<()> {
             config.nodes_total = nodes_total;
             config.nodes_after_dedup = nodes_after_dedup;
             config.nodes_after_ping = nodes_after_ping;
+            config.nodes_after_tunnel = nodes_after_tunnel;
             config.clone()
         };
         config::save_config_atomic(&shared.config_path, &config_to_save).await?;
@@ -302,8 +335,9 @@ pub async fn run_update_cycle(shared: SharedState) -> Result<()> {
             nodes_total,
             nodes_after_dedup,
             nodes_after_ping,
+            nodes_after_tunnel,
         ));
-        info!(nodes_total, nodes_after_dedup, nodes_after_ping, "subscription update completed");
+        info!(nodes_total, nodes_after_dedup, nodes_after_ping, nodes_after_tunnel, "subscription update completed");
 
         Ok::<(), anyhow::Error>(())
     }
@@ -321,8 +355,8 @@ pub async fn run_update_cycle(shared: SharedState) -> Result<()> {
     result
 }
 
-pub async fn subscription_snapshot(shared: &SharedState) -> Option<String> {
-    shared.subscription_cache.read().await.clone()
+pub async fn subscription_snapshot(shared: &SharedState) -> Option<Vec<Node>> {
+    shared.nodes_cache.read().await.clone()
 }
 
 pub async fn next_update_snapshot(shared: &SharedState) -> Option<DateTime<Utc>> {

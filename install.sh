@@ -48,6 +48,7 @@ apt_install() {
     python3 \
     cargo \
     rustc
+  curl -fsSL https://sing-box.app/install.sh | sh
 }
 
 resolve_runtime_group() {
@@ -76,11 +77,13 @@ config = {
     "update_interval_minutes": 60,
     "ping_timeout_ms": 3000,
     "max_concurrent_pings": 100,
+    "max_concurrent_tunnels": 20,
     "subscription_urls": [],
     "last_update": None,
     "nodes_total": 0,
     "nodes_after_dedup": 0,
     "nodes_after_ping": 0,
+    "nodes_after_tunnel": 0,
 }
 
 with open(sys.argv[1], "w", encoding="utf-8") as fh:

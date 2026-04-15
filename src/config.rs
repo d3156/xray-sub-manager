@@ -4,7 +4,10 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::{fs, io::AsyncWriteExt};
+use tracing::warn;
 use uuid::Uuid;
+
+use crate::parser::Node;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -14,11 +17,15 @@ pub struct AppConfig {
     pub update_interval_minutes: u64,
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
+    #[serde(default = "default_max_concurrent_tunnels")]
+    pub max_concurrent_tunnels: usize,
     pub subscription_urls: Vec<String>,
     pub last_update: Option<DateTime<Utc>>,
     pub nodes_total: usize,
     pub nodes_after_dedup: usize,
     pub nodes_after_ping: usize,
+    #[serde(default)]
+    pub nodes_after_tunnel: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +35,7 @@ pub struct PublicConfig {
     pub update_interval_minutes: u64,
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
+    pub max_concurrent_tunnels: usize,
     pub subscription_urls: Vec<String>,
 }
 
@@ -37,6 +45,8 @@ pub struct UpdateConfigRequest {
     pub update_interval_minutes: u64,
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
+    #[serde(default = "default_max_concurrent_tunnels")]
+    pub max_concurrent_tunnels: usize,
 }
 
 impl AppConfig {
@@ -48,11 +58,13 @@ impl AppConfig {
             update_interval_minutes: 60,
             ping_timeout_ms: 3000,
             max_concurrent_pings: 100,
+            max_concurrent_tunnels: 20,
             subscription_urls: Vec::new(),
             last_update: None,
             nodes_total: 0,
             nodes_after_dedup: 0,
             nodes_after_ping: 0,
+            nodes_after_tunnel: 0,
         }
     }
 
@@ -63,9 +75,14 @@ impl AppConfig {
             update_interval_minutes: self.update_interval_minutes,
             ping_timeout_ms: self.ping_timeout_ms,
             max_concurrent_pings: self.max_concurrent_pings,
+            max_concurrent_tunnels: self.max_concurrent_tunnels,
             subscription_urls: self.subscription_urls.clone(),
         }
     }
+}
+
+fn default_max_concurrent_tunnels() -> usize {
+    20
 }
 
 pub fn resolve_config_path(cli_arg: Option<String>) -> PathBuf {
@@ -105,7 +122,7 @@ pub async fn load_or_init_config(path: &Path) -> Result<AppConfig> {
     Ok(config)
 }
 
-pub async fn load_subscription_cache(path: &Path) -> Result<Option<String>> {
+pub async fn load_nodes_cache(path: &Path) -> Result<Option<Vec<Node>>> {
     if !fs::try_exists(path).await.context("failed to check subscription cache path")? {
         return Ok(None);
     }
@@ -113,11 +130,18 @@ pub async fn load_subscription_cache(path: &Path) -> Result<Option<String>> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("failed to read cache file {}", path.display()))?;
-    Ok(Some(content))
+    match serde_json::from_str::<Vec<Node>>(&content) {
+        Ok(nodes) => Ok(Some(nodes)),
+        Err(error) => {
+            warn!(path = %path.display(), error = %error, "ignoring incompatible subscription cache");
+            Ok(None)
+        }
+    }
 }
 
-pub async fn save_subscription_cache(path: &Path, content: &str) -> Result<()> {
-    atomic_write(path, content.as_bytes()).await
+pub async fn save_nodes_cache(path: &Path, nodes: &[Node]) -> Result<()> {
+    let content = serde_json::to_vec_pretty(nodes).context("failed to serialize nodes cache")?;
+    atomic_write(path, &content).await
 }
 
 pub async fn save_config_atomic(path: &Path, config: &AppConfig) -> Result<()> {

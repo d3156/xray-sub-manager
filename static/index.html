@@ -517,7 +517,7 @@
         <div id="dedup-nodes" class="stat-value">0</div>
       </article>
       <article class="card accent-green">
-        <div class="stat-label">✅ After Ping</div>
+        <div class="stat-label">✅ After Tunnel</div>
         <div id="online-nodes" class="stat-value">0</div>
       </article>
       <article class="card accent-orange">
@@ -553,7 +553,7 @@
         <article class="card graph-node accent-green">
           <span class="graph-title">Result</span>
           <div id="graph-result" class="graph-value">0 nodes</div>
-          <div class="muted small">Base64 output subscription</div>
+          <div id="tunnel-progress" class="muted small">Fastest tunnel shortlist</div>
         </article>
       </div>
     </section>
@@ -588,6 +588,10 @@
           <label>
             <span>Max parallel pings</span>
             <input id="parallel-input" type="number" min="1" max="500" required>
+          </label>
+          <label>
+            <span>Max parallel tunnels</span>
+            <input id="tunnel-parallel-input" type="number" min="1" max="500" required>
           </label>
           <button class="btn-primary" type="submit">Save Settings</button>
         </form>
@@ -639,6 +643,7 @@
       graphPing: document.getElementById('graph-ping'),
       graphResult: document.getElementById('graph-result'),
       pingProgress: document.getElementById('ping-progress'),
+      tunnelProgress: document.getElementById('tunnel-progress'),
       lastUpdate: document.getElementById('last-update'),
       nextUpdate: document.getElementById('next-update'),
       statusPill: document.getElementById('status-pill'),
@@ -647,6 +652,7 @@
       intervalInput: document.getElementById('interval-input'),
       timeoutInput: document.getElementById('timeout-input'),
       parallelInput: document.getElementById('parallel-input'),
+      tunnelParallelInput: document.getElementById('tunnel-parallel-input'),
       subscriptionUrl: document.getElementById('subscription-url'),
       copyUrl: document.getElementById('copy-url'),
       toggleToken: document.getElementById('toggle-token'),
@@ -741,14 +747,16 @@
 
       const removedDupes = Math.max(0, stats.nodes_total - stats.nodes_after_dedup);
       const removedOffline = Math.max(0, stats.nodes_after_dedup - stats.nodes_after_ping);
+      const removedByTunnel = Math.max(0, stats.nodes_after_ping - (stats.nodes_after_tunnel || 0));
 
       els.totalNodes.textContent = formatNumber(stats.nodes_total);
       els.dedupNodes.textContent = formatNumber(stats.nodes_after_dedup);
-      els.onlineNodes.textContent = formatNumber(stats.nodes_after_ping);
+      els.onlineNodes.textContent = formatNumber(stats.nodes_after_tunnel || 0);
       els.graphFetched.textContent = `${formatNumber(stats.nodes_total)} nodes`;
       els.graphDedup.textContent = `${formatNumber(removedDupes)} dupes removed`;
       els.graphPing.textContent = `${formatNumber(removedOffline)} offline filtered`;
-      els.graphResult.textContent = `${formatNumber(stats.nodes_after_ping)} nodes`;
+      els.graphResult.textContent = `${formatNumber(stats.nodes_after_tunnel || 0)} nodes`;
+      els.tunnelProgress.textContent = `${formatNumber(removedByTunnel)} tunnels filtered`;
       els.lastUpdate.textContent = formatDate(stats.last_update);
       els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
       els.countdown.textContent = formatCountdown(state.nextUpdate);
@@ -760,6 +768,9 @@
       if (!updating && els.pingProgress.textContent.startsWith('Pinging')) {
         els.pingProgress.textContent = 'TCP reachability filter';
       }
+      if (!updating && els.tunnelProgress.textContent.startsWith('Testing tunnels')) {
+        els.tunnelProgress.textContent = `${formatNumber(removedByTunnel)} tunnels filtered`;
+      }
     }
 
     async function loadConfig() {
@@ -769,6 +780,7 @@
       els.intervalInput.value = config.update_interval_minutes;
       els.timeoutInput.value = config.ping_timeout_ms;
       els.parallelInput.value = config.max_concurrent_pings;
+      els.tunnelParallelInput.value = config.max_concurrent_tunnels || 20;
       renderEndpoint();
     }
 
@@ -812,6 +824,9 @@
 
         if (data.event === 'ping_progress') {
           els.pingProgress.textContent = `Pinging ${data.done}/${data.total} nodes`;
+        }
+        if (data.event === 'tunnel_progress') {
+          els.tunnelProgress.textContent = `Testing tunnels ${data.done}/${data.total}`;
         }
         if (data.event === 'update_complete') {
           showToast('Update completed');
@@ -870,7 +885,8 @@
         subscription_urls: els.subscriptionUrls.value.split('\n').map(v => v.trim()).filter(Boolean),
         update_interval_minutes: Number(els.intervalInput.value),
         ping_timeout_ms: Number(els.timeoutInput.value),
-        max_concurrent_pings: Number(els.parallelInput.value)
+        max_concurrent_pings: Number(els.parallelInput.value),
+        max_concurrent_tunnels: Number(els.tunnelParallelInput.value)
       };
 
       try {
