@@ -309,22 +309,126 @@
       gap: 8px;
       padding: 7px 11px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid transparent;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
     }
 
     .status-dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: var(--neon-green);
+      background: currentColor;
+    }
+
+    .status-pill.ready {
+      color: #8effc4;
+      background: rgba(0, 255, 136, 0.1);
+      border-color: rgba(0, 255, 136, 0.4);
+      box-shadow: 0 0 14px rgba(0, 255, 136, 0.18);
+    }
+
+    .status-pill.ready .status-dot {
       box-shadow: 0 0 12px rgba(0, 255, 136, 0.45);
     }
 
+    .status-pill.updating {
+      color: #ffd4be;
+      background: rgba(255, 107, 53, 0.12);
+      border-color: rgba(255, 107, 53, 0.44);
+      box-shadow: 0 0 14px rgba(255, 107, 53, 0.2);
+    }
+
     .status-pill.updating .status-dot {
-      background: var(--neon-orange);
       box-shadow: 0 0 12px rgba(255, 107, 53, 0.45);
       animation: pulse 1.1s infinite;
+    }
+
+    .status-pill.fallback {
+      color: #ffc7d8;
+      background: rgba(255, 79, 120, 0.12);
+      border-color: rgba(255, 79, 120, 0.44);
+      box-shadow: 0 0 14px rgba(255, 79, 120, 0.2);
+    }
+
+    .status-pill.fallback .status-dot {
+      box-shadow: 0 0 12px rgba(255, 79, 120, 0.45);
+    }
+
+    .status-pill.whitelist {
+      color: #e4c8ff;
+      background: rgba(180, 79, 255, 0.12);
+      border-color: rgba(180, 79, 255, 0.44);
+      box-shadow: 0 0 14px rgba(180, 79, 255, 0.2);
+    }
+
+    .status-pill.whitelist .status-dot {
+      box-shadow: 0 0 12px rgba(180, 79, 255, 0.45);
+    }
+
+    .state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .state-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .state-badge.success {
+      color: #8effc4;
+      border-color: rgba(0, 255, 136, 0.36);
+      background: rgba(0, 255, 136, 0.08);
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.12);
+    }
+
+    .state-badge.warning {
+      color: #ffd4be;
+      border-color: rgba(255, 107, 53, 0.36);
+      background: rgba(255, 107, 53, 0.08);
+      box-shadow: 0 0 12px rgba(255, 107, 53, 0.12);
+    }
+
+    .state-badge.error {
+      color: #ffc7d8;
+      border-color: rgba(255, 79, 120, 0.38);
+      background: rgba(255, 79, 120, 0.08);
+      box-shadow: 0 0 12px rgba(255, 79, 120, 0.12);
+    }
+
+    .state-badge.info {
+      color: #e4c8ff;
+      border-color: rgba(180, 79, 255, 0.38);
+      background: rgba(180, 79, 255, 0.08);
+      box-shadow: 0 0 12px rgba(180, 79, 255, 0.12);
+    }
+
+    .state-badge.neutral {
+      color: #d8d8ec;
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .state-badge.muted {
+      color: #a2a2bf;
+      border-color: rgba(128, 128, 160, 0.34);
+      background: rgba(128, 128, 160, 0.12);
     }
 
     .endpoint {
@@ -566,12 +670,12 @@
         <div class="kv">
           <div class="kv-row"><span>Last update</span><strong id="last-update">Never</strong></div>
           <div class="kv-row"><span>Next update</span><strong id="next-update">--</strong></div>
-          <div class="kv-row"><span>Status</span><span id="status-pill" class="status-pill"><span class="status-dot"></span><span>Ready</span></span></div>
-          <div class="kv-row"><span>Active interface</span><strong id="active-interface">Modem</strong></div>
-          <div class="kv-row"><span>Fallback</span><strong id="fallback-state">Off</strong></div>
-          <div class="kv-row"><span>White-list mode</span><strong id="whitelist-state">Off</strong></div>
-          <div class="kv-row"><span>White URL check</span><strong id="white-check-state">Not checked</strong></div>
-          <div class="kv-row"><span>Gray URL check</span><strong id="gray-check-state">Not checked</strong></div>
+          <div class="kv-row"><span>Status</span><span id="status-pill" class="status-pill ready" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-pill-label">Normal operation</span></span></div>
+          <div class="kv-row"><span>Active interface</span><span id="active-interface" class="state-badge success">Modem interface</span></div>
+          <div class="kv-row"><span>Fallback</span><span id="fallback-state" class="state-badge neutral">Disabled</span></div>
+          <div class="kv-row"><span>White-list mode</span><span id="whitelist-state" class="state-badge neutral">Disabled</span></div>
+          <div class="kv-row"><span>White URL check</span><span id="white-check-state" class="state-badge muted">Not checked</span></div>
+          <div class="kv-row"><span>Gray URL check</span><span id="gray-check-state" class="state-badge muted">Not checked</span></div>
           <div class="kv-row"><span>Last internet check</span><strong id="network-last-check">Never</strong></div>
         </div>
       </article>
@@ -668,6 +772,7 @@
       lastUpdate: document.getElementById('last-update'),
       nextUpdate: document.getElementById('next-update'),
       statusPill: document.getElementById('status-pill'),
+      statusPillLabel: document.getElementById('status-pill-label'),
       activeInterface: document.getElementById('active-interface'),
       fallbackState: document.getElementById('fallback-state'),
       whitelistState: document.getElementById('whitelist-state'),
@@ -759,14 +864,49 @@
       return numberFormatter.format(Number(value || 0));
     }
 
-    function formatProbeStatus(value) {
+    function resolveProbeState(value) {
       if (value === true) {
-        return 'OK';
+        return { label: 'Reachable', tone: 'success' };
       }
       if (value === false) {
-        return 'Failed';
+        return { label: 'Failed', tone: 'error' };
       }
-      return 'Not checked';
+      return { label: 'Not checked', tone: 'muted' };
+    }
+
+    function setStateBadge(element, state) {
+      element.classList.remove('success', 'warning', 'error', 'info', 'neutral', 'muted');
+      element.classList.add('state-badge', state.tone);
+      element.textContent = state.label;
+    }
+
+    function resolveRuntimeStatus(stats) {
+      if (stats.is_updating) {
+        return {
+          mode: 'updating',
+          shortText: 'Updating',
+          longText: 'Update in progress'
+        };
+      }
+      if (stats.fallback_to_default_internet) {
+        return {
+          mode: 'fallback',
+          shortText: 'Fallback mode',
+          longText: 'Using default internet'
+        };
+      }
+      if (stats.whitelist_mode) {
+        return {
+          mode: 'whitelist',
+          shortText: 'White-list mode',
+          longText: 'Restricted modem access'
+        };
+      }
+      return {
+        mode: 'ready',
+        shortText: 'Ready',
+        longText: 'Normal operation'
+      };
     }
 
     function formatCountdown(target) {
@@ -800,34 +940,27 @@
       els.lastUpdate.textContent = formatDate(stats.last_update);
       els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
       els.countdown.textContent = formatCountdown(state.nextUpdate);
-      els.activeInterface.textContent = stats.fallback_to_default_internet ? 'Default internet' : 'Modem interface';
-      els.fallbackState.textContent = stats.fallback_to_default_internet ? 'ON' : 'Off';
-      els.whitelistState.textContent = stats.whitelist_mode ? 'ON' : 'Off';
-      els.whiteCheckState.textContent = formatProbeStatus(stats.white_url_ok);
-      els.grayCheckState.textContent = formatProbeStatus(stats.gray_url_ok);
+      setStateBadge(els.activeInterface, stats.fallback_to_default_internet
+        ? { label: 'Default internet', tone: 'warning' }
+        : { label: 'Modem interface', tone: 'success' });
+      setStateBadge(els.fallbackState, stats.fallback_to_default_internet
+        ? { label: 'Enabled', tone: 'warning' }
+        : { label: 'Disabled', tone: 'neutral' });
+      setStateBadge(els.whitelistState, stats.whitelist_mode
+        ? { label: 'Enabled', tone: 'info' }
+        : { label: 'Disabled', tone: 'neutral' });
+      setStateBadge(els.whiteCheckState, resolveProbeState(stats.white_url_ok));
+      setStateBadge(els.grayCheckState, resolveProbeState(stats.gray_url_ok));
       els.networkLastCheck.textContent = formatDate(stats.network_last_check);
       els.connectivityStage.textContent = state.connectivityStage;
 
-      const updating = Boolean(stats.is_updating);
-      if (updating) {
-        els.statusText.textContent = 'Update in progress';
-      } else if (stats.fallback_to_default_internet) {
-        els.statusText.textContent = 'Fallback to default internet';
-      } else if (stats.whitelist_mode) {
-        els.statusText.textContent = 'White-list mode active';
-      } else {
-        els.statusText.textContent = 'Ready';
-      }
-      els.statusPill.classList.toggle('updating', updating);
-      if (updating) {
-        els.statusPill.lastElementChild.textContent = 'Updating...';
-      } else if (stats.fallback_to_default_internet) {
-        els.statusPill.lastElementChild.textContent = 'Fallback';
-      } else if (stats.whitelist_mode) {
-        els.statusPill.lastElementChild.textContent = 'White-list';
-      } else {
-        els.statusPill.lastElementChild.textContent = 'Ready';
-      }
+      const runtimeStatus = resolveRuntimeStatus(stats);
+      els.statusText.textContent = runtimeStatus.shortText;
+      els.statusPill.classList.remove('ready', 'updating', 'fallback', 'whitelist');
+      els.statusPill.classList.add(runtimeStatus.mode);
+      els.statusPillLabel.textContent = runtimeStatus.longText;
+
+      const updating = runtimeStatus.mode === 'updating';
       if (!updating && els.pingProgress.textContent.startsWith('Pinging')) {
         els.pingProgress.textContent = 'TCP reachability filter';
       }
