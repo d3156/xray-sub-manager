@@ -1,4 +1,12 @@
-use std::{env, path::{Path, PathBuf}, process::Stdio, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use anyhow::{anyhow, Context, Result};
 use reqwest::{Proxy, StatusCode};
@@ -14,7 +22,10 @@ use tokio::{
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::{parser::{Node, Protocol}, pinger::ProgressCallback};
+use crate::{
+    parser::{Node, Protocol},
+    pinger::ProgressCallback,
+};
 
 const DEFAULT_PROBE_URL: &str = "https://www.gstatic.com/generate_204";
 
@@ -23,6 +34,7 @@ pub async fn probe_tunnels(
     probe_timeout: Duration,
     max_concurrent: usize,
     progress_callback: Option<ProgressCallback>,
+    bind_interface: Option<String>,
 ) -> Vec<Node> {
     if nodes.is_empty() {
         return nodes;
@@ -37,10 +49,12 @@ pub async fn probe_tunnels(
         let semaphore = semaphore.clone();
         let done_counter = done_counter.clone();
         let progress_callback = progress_callback.clone();
+        let bind_interface = bind_interface.clone();
 
         tasks.spawn(async move {
             let permit = semaphore.acquire_owned().await.ok();
-            let checked_node = probe_single_tunnel(node, probe_timeout).await;
+            let checked_node =
+                probe_single_tunnel(node, probe_timeout, bind_interface.as_deref()).await;
 
             drop(permit);
             let done = done_counter.fetch_add(1, Ordering::SeqCst) + 1;
@@ -64,11 +78,15 @@ pub async fn probe_tunnels(
     online
 }
 
-async fn probe_single_tunnel(mut node: Node, probe_timeout: Duration) -> Node {
+async fn probe_single_tunnel(
+    mut node: Node,
+    probe_timeout: Duration,
+    bind_interface: Option<&str>,
+) -> Node {
     let node_name = node.display_name.clone();
     let node_target = format!("{}:{}", node.host, node.port);
 
-    match probe_single_tunnel_inner(&mut node, probe_timeout).await {
+    match probe_single_tunnel_inner(&mut node, probe_timeout, bind_interface).await {
         Ok(()) => node,
         Err(error) => {
             warn!(node = %node_name, target = %node_target, error = %error, "tunnel probe failed");
@@ -79,7 +97,11 @@ async fn probe_single_tunnel(mut node: Node, probe_timeout: Duration) -> Node {
     }
 }
 
-async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> Result<()> {
+async fn probe_single_tunnel_inner(
+    node: &mut Node,
+    probe_timeout: Duration,
+    bind_interface: Option<&str>,
+) -> Result<()> {
     let temp_dir = tunnel_work_dir();
     fs::create_dir_all(&temp_dir)
         .await
@@ -87,8 +109,9 @@ async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> 
 
     let listen_port = reserve_local_port().await?;
     let config_path = temp_dir.join("sing-box.json");
-    let config = build_sing_box_config(node, listen_port)?;
-    let serialized = serde_json::to_vec_pretty(&config).context("failed to serialize sing-box config")?;
+    let config = build_sing_box_config(node, listen_port, bind_interface)?;
+    let serialized =
+        serde_json::to_vec_pretty(&config).context("failed to serialize sing-box config")?;
     fs::write(&config_path, serialized)
         .await
         .with_context(|| format!("failed to write tunnel config {}", config_path.display()))?;
@@ -104,7 +127,8 @@ async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> 
         .with_context(|| format!("failed to start {binary}"))?;
 
     let local_addr = format!("127.0.0.1:{listen_port}");
-    let startup_result = timeout(probe_timeout, wait_for_local_proxy(&mut child, &local_addr)).await;
+    let startup_result =
+        timeout(probe_timeout, wait_for_local_proxy(&mut child, &local_addr)).await;
     match startup_result {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
@@ -113,13 +137,20 @@ async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> 
         }
         Err(_) => {
             cleanup_child_and_dir(&mut child, &temp_dir).await;
-            return Err(anyhow!("tunnel startup timed out after {} ms", probe_timeout.as_millis()));
+            return Err(anyhow!(
+                "tunnel startup timed out after {} ms",
+                probe_timeout.as_millis()
+            ));
         }
     }
 
     let probe_url = env::var("TUNNEL_PROBE_URL").unwrap_or_else(|_| DEFAULT_PROBE_URL.to_string());
     let started_at = Instant::now();
-    let measure_result = timeout(probe_timeout, measure_tunnel_http_get(&local_addr, &probe_url)).await;
+    let measure_result = timeout(
+        probe_timeout,
+        measure_tunnel_http_get(&local_addr, &probe_url),
+    )
+    .await;
     match measure_result {
         Ok(Ok(())) => {
             node.tunnel_ok = true;
@@ -131,7 +162,10 @@ async fn probe_single_tunnel_inner(node: &mut Node, probe_timeout: Duration) -> 
         }
         Err(_) => {
             cleanup_child_and_dir(&mut child, &temp_dir).await;
-            return Err(anyhow!("tunnel probe timed out after {} ms", probe_timeout.as_millis()));
+            return Err(anyhow!(
+                "tunnel probe timed out after {} ms",
+                probe_timeout.as_millis()
+            ));
         }
     }
 
@@ -153,7 +187,10 @@ async fn reserve_local_port() -> Result<u16> {
 
 async fn wait_for_local_proxy(child: &mut Child, local_addr: &str) -> Result<()> {
     loop {
-        if let Some(status) = child.try_wait().context("failed to poll sing-box process")? {
+        if let Some(status) = child
+            .try_wait()
+            .context("failed to poll sing-box process")?
+        {
             return Err(anyhow!("sing-box exited early with status {status}"));
         }
 
@@ -170,7 +207,10 @@ async fn wait_for_local_proxy(child: &mut Child, local_addr: &str) -> Result<()>
 async fn measure_tunnel_http_get(local_addr: &str, probe_url: &str) -> Result<()> {
     let proxy_url = format!("socks5h://{local_addr}");
     let client = reqwest::Client::builder()
-        .proxy(Proxy::all(&proxy_url).with_context(|| format!("failed to configure proxy {proxy_url}"))?)
+        .proxy(
+            Proxy::all(&proxy_url)
+                .with_context(|| format!("failed to configure proxy {proxy_url}"))?,
+        )
         .build()
         .context("failed to build HTTP client for tunnel probe")?;
 
@@ -214,8 +254,12 @@ fn tunnel_work_dir() -> PathBuf {
     env::temp_dir().join(format!("xray-sub-manager-tunnel-{}", Uuid::new_v4()))
 }
 
-fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
-    let outbound = build_outbound(node)?;
+fn build_sing_box_config(
+    node: &Node,
+    listen_port: u16,
+    bind_interface: Option<&str>,
+) -> Result<Value> {
+    let outbound = build_outbound(node, bind_interface)?;
 
     Ok(json!({
         "log": { "disabled": true },
@@ -234,16 +278,17 @@ fn build_sing_box_config(node: &Node, listen_port: u16) -> Result<Value> {
     }))
 }
 
-fn build_outbound(node: &Node) -> Result<Value> {
+fn build_outbound(node: &Node, bind_interface: Option<&str>) -> Result<Value> {
     let mut outbound = Map::new();
-    let modem_interface = std::env::var("MODEM_INTERFACE")
-        .unwrap_or_else(|_| "enx020d0c073330".to_string());
 
     outbound.insert("tag".to_string(), Value::String("proxy".to_string()));
     outbound.insert("server".to_string(), Value::String(node.host.clone()));
     outbound.insert("server_port".to_string(), Value::Number(node.port.into()));
-    if !modem_interface.is_empty() {
-        outbound.insert("bind_interface".to_string(), Value::String(modem_interface));
+    if let Some(interface) = bind_interface.filter(|value| !value.trim().is_empty()) {
+        outbound.insert(
+            "bind_interface".to_string(),
+            Value::String(interface.to_string()),
+        );
     }
 
     match node.protocol {
@@ -252,9 +297,18 @@ fn build_outbound(node: &Node) -> Result<Value> {
             outbound.insert("uuid".to_string(), string_param(node, "id")?);
             outbound.insert(
                 "security".to_string(),
-                Value::String(node.params.get("scy").cloned().unwrap_or_else(|| "auto".to_string())),
+                Value::String(
+                    node.params
+                        .get("scy")
+                        .cloned()
+                        .unwrap_or_else(|| "auto".to_string()),
+                ),
             );
-            if let Some(aid) = node.params.get("aid").and_then(|value| value.parse::<u64>().ok()) {
+            if let Some(aid) = node
+                .params
+                .get("aid")
+                .and_then(|value| value.parse::<u64>().ok())
+            {
                 outbound.insert("alter_id".to_string(), Value::Number(aid.into()));
             }
         }
@@ -271,14 +325,18 @@ fn build_outbound(node: &Node) -> Result<Value> {
         }
         Protocol::Shadowsocks => {
             if node.params.contains_key("plugin") {
-                return Err(anyhow!("shadowsocks plugins are not supported by tunnel probe"));
+                return Err(anyhow!(
+                    "shadowsocks plugins are not supported by tunnel probe"
+                ));
             }
             outbound.insert("type".to_string(), Value::String("shadowsocks".to_string()));
             outbound.insert("method".to_string(), string_param(node, "method")?);
             outbound.insert("password".to_string(), string_param(node, "password")?);
         }
         Protocol::ShadowsocksR => {
-            return Err(anyhow!("shadowsocksr is not supported by sing-box tunnel probe"));
+            return Err(anyhow!(
+                "shadowsocksr is not supported by sing-box tunnel probe"
+            ));
         }
         Protocol::Hysteria2 => {
             outbound.insert("type".to_string(), Value::String("hysteria2".to_string()));
@@ -297,7 +355,10 @@ fn build_outbound(node: &Node) -> Result<Value> {
             outbound.insert("uuid".to_string(), string_param(node, "uuid")?);
             outbound.insert("password".to_string(), string_param(node, "password")?);
             if let Some(value) = node.params.get("congestion_control") {
-                outbound.insert("congestion_control".to_string(), Value::String(value.clone()));
+                outbound.insert(
+                    "congestion_control".to_string(),
+                    Value::String(value.clone()),
+                );
             }
             if let Some(value) = node.params.get("udp_relay_mode") {
                 outbound.insert("udp_relay_mode".to_string(), Value::String(value.clone()));
@@ -339,7 +400,11 @@ fn build_transport(node: &Node) -> Result<Option<Value>> {
         "grpc" => {
             let mut transport = Map::new();
             transport.insert("type".to_string(), Value::String("grpc".to_string()));
-            if let Some(service_name) = node.params.get("serviceName").or_else(|| node.params.get("path")) {
+            if let Some(service_name) = node
+                .params
+                .get("serviceName")
+                .or_else(|| node.params.get("path"))
+            {
                 transport.insert(
                     "service_name".to_string(),
                     Value::String(service_name.trim_start_matches('/').to_string()),
@@ -387,7 +452,11 @@ fn build_transport(node: &Node) -> Result<Option<Value>> {
 }
 
 fn build_tls(node: &Node) -> Option<Value> {
-    let security = node.params.get("security").map(|value| value.as_str()).unwrap_or("none");
+    let security = node
+        .params
+        .get("security")
+        .map(|value| value.as_str())
+        .unwrap_or("none");
     let has_tls = security == "tls"
         || security == "reality"
         || node.params.contains_key("sni")
@@ -397,7 +466,11 @@ fn build_tls(node: &Node) -> Option<Value> {
         return None;
     }
 
-    let server_name = node.params.get("sni").cloned().unwrap_or_else(|| node.host.clone());
+    let server_name = node
+        .params
+        .get("sni")
+        .cloned()
+        .unwrap_or_else(|| node.host.clone());
     let mut tls = Map::new();
     tls.insert("enabled".to_string(), Value::Bool(true));
     tls.insert("server_name".to_string(), Value::String(server_name));

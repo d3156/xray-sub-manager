@@ -41,7 +41,9 @@ async fn fetch_with_retry(client: &Client, url: &str) -> Result<String> {
             }
             Err(error) => {
                 if attempt == max_attempts {
-                    return Err(error).with_context(|| format!("failed to fetch {url} after {max_attempts} attempts"));
+                    return Err(error).with_context(|| {
+                        format!("failed to fetch {url} after {max_attempts} attempts")
+                    });
                 }
 
                 warn!(url = %url, attempt, error = %error, "subscription fetch attempt failed");

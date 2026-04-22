@@ -1,4 +1,7 @@
-use std::{env, path::{Path, PathBuf}};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -19,6 +22,12 @@ pub struct AppConfig {
     pub max_concurrent_pings: usize,
     #[serde(default = "default_max_concurrent_tunnels")]
     pub max_concurrent_tunnels: usize,
+    #[serde(default = "default_network_check_interval_minutes")]
+    pub network_check_interval_minutes: u64,
+    #[serde(default = "default_white_url")]
+    pub white_url: String,
+    #[serde(default = "default_gray_url")]
+    pub gray_url: String,
     pub subscription_urls: Vec<String>,
     pub last_update: Option<DateTime<Utc>>,
     pub nodes_total: usize,
@@ -36,6 +45,9 @@ pub struct PublicConfig {
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
     pub max_concurrent_tunnels: usize,
+    pub network_check_interval_minutes: u64,
+    pub white_url: String,
+    pub gray_url: String,
     pub subscription_urls: Vec<String>,
 }
 
@@ -47,6 +59,12 @@ pub struct UpdateConfigRequest {
     pub max_concurrent_pings: usize,
     #[serde(default = "default_max_concurrent_tunnels")]
     pub max_concurrent_tunnels: usize,
+    #[serde(default = "default_network_check_interval_minutes")]
+    pub network_check_interval_minutes: u64,
+    #[serde(default = "default_white_url")]
+    pub white_url: String,
+    #[serde(default = "default_gray_url")]
+    pub gray_url: String,
 }
 
 impl AppConfig {
@@ -59,6 +77,9 @@ impl AppConfig {
             ping_timeout_ms: 3000,
             max_concurrent_pings: 100,
             max_concurrent_tunnels: 20,
+            network_check_interval_minutes: default_network_check_interval_minutes(),
+            white_url: default_white_url(),
+            gray_url: default_gray_url(),
             subscription_urls: Vec::new(),
             last_update: None,
             nodes_total: 0,
@@ -76,6 +97,9 @@ impl AppConfig {
             ping_timeout_ms: self.ping_timeout_ms,
             max_concurrent_pings: self.max_concurrent_pings,
             max_concurrent_tunnels: self.max_concurrent_tunnels,
+            network_check_interval_minutes: self.network_check_interval_minutes,
+            white_url: self.white_url.clone(),
+            gray_url: self.gray_url.clone(),
             subscription_urls: self.subscription_urls.clone(),
         }
     }
@@ -83,6 +107,18 @@ impl AppConfig {
 
 fn default_max_concurrent_tunnels() -> usize {
     20
+}
+
+fn default_network_check_interval_minutes() -> u64 {
+    10
+}
+
+fn default_white_url() -> String {
+    "https://www.gstatic.com/generate_204".to_string()
+}
+
+fn default_gray_url() -> String {
+    "https://example.com".to_string()
 }
 
 pub fn resolve_config_path(cli_arg: Option<String>) -> PathBuf {
@@ -108,7 +144,10 @@ pub fn cache_path_for(config_path: &Path) -> PathBuf {
 }
 
 pub async fn load_or_init_config(path: &Path) -> Result<AppConfig> {
-    if fs::try_exists(path).await.context("failed to check config path")? {
+    if fs::try_exists(path)
+        .await
+        .context("failed to check config path")?
+    {
         let content = fs::read_to_string(path)
             .await
             .with_context(|| format!("failed to read config file {}", path.display()))?;
@@ -123,7 +162,10 @@ pub async fn load_or_init_config(path: &Path) -> Result<AppConfig> {
 }
 
 pub async fn load_nodes_cache(path: &Path) -> Result<Option<Vec<Node>>> {
-    if !fs::try_exists(path).await.context("failed to check subscription cache path")? {
+    if !fs::try_exists(path)
+        .await
+        .context("failed to check subscription cache path")?
+    {
         return Ok(None);
     }
 

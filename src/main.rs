@@ -13,10 +13,17 @@ use std::{env, net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
 use reqwest::Client;
-use tokio::{net::TcpListener, sync::{broadcast, Notify}};
+use tokio::{
+    net::TcpListener,
+    sync::{broadcast, Notify},
+};
 use tracing::{error, info};
 
-use crate::{config::{cache_path_for, load_nodes_cache, load_or_init_config, resolve_config_path}, scheduler::{spawn_scheduler, SharedState}, web::{build_router, AppState}};
+use crate::{
+    config::{cache_path_for, load_nodes_cache, load_or_init_config, resolve_config_path},
+    scheduler::{spawn_scheduler, SharedState},
+    web::{build_router, AppState},
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,7 +31,9 @@ async fn main() -> Result<()> {
 
     let cli_config_path = env::args().nth(1);
     let config_path = resolve_config_path(cli_config_path);
-    let config = load_or_init_config(&config_path).await.context("failed to load config")?;
+    let config = load_or_init_config(&config_path)
+        .await
+        .context("failed to load config")?;
     let subscription_cache_path = cache_path_for(&config_path);
     let cached_subscription = load_nodes_cache(&subscription_cache_path)
         .await
@@ -123,7 +132,8 @@ async fn shutdown_signal() -> Result<()> {
     {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let mut terminate = signal(SignalKind::terminate()).context("failed to register SIGTERM handler")?;
+        let mut terminate =
+            signal(SignalKind::terminate()).context("failed to register SIGTERM handler")?;
         tokio::select! {
             ctrl_c = tokio::signal::ctrl_c() => {
                 ctrl_c.context("failed to listen for Ctrl+C")?;
@@ -134,7 +144,9 @@ async fn shutdown_signal() -> Result<()> {
 
     #[cfg(not(unix))]
     {
-        tokio::signal::ctrl_c().await.context("failed to listen for Ctrl+C")?;
+        tokio::signal::ctrl_c()
+            .await
+            .context("failed to listen for Ctrl+C")?;
     }
 
     Ok(())

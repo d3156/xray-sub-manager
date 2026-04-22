@@ -1,5 +1,8 @@
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Query, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -8,8 +11,13 @@ use axum::{
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
+use url::Url;
 
-use crate::{config::{save_config_atomic, AppConfig, UpdateConfigRequest}, encoder::encode_subscription, scheduler::{stats_snapshot, subscription_snapshot, SchedulerHandle, SharedState, UpdateEvent}};
+use crate::{
+    config::{save_config_atomic, AppConfig, UpdateConfigRequest},
+    encoder::encode_subscription,
+    scheduler::{stats_snapshot, subscription_snapshot, SchedulerHandle, SharedState, UpdateEvent},
+};
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
 
@@ -45,6 +53,11 @@ struct StatsResponse {
     nodes_after_ping: usize,
     nodes_after_tunnel: usize,
     is_updating: bool,
+    network_last_check: Option<chrono::DateTime<chrono::Utc>>,
+    fallback_to_default_internet: bool,
+    whitelist_mode: bool,
+    white_url_ok: Option<bool>,
+    gray_url_ok: Option<bool>,
 }
 
 pub fn build_router(app_state: AppState) -> Router {
@@ -63,7 +76,10 @@ async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
 }
 
-async fn login(State(state): State<AppState>, Json(payload): Json<LoginRequest>) -> impl IntoResponse {
+async fn login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
     let config = state.shared.config.read().await;
     if payload.token != config.admin_token {
         return (
@@ -113,13 +129,22 @@ async fn update_config(
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
+    let white_url = payload.white_url.trim().to_string();
+    let gray_url = payload.gray_url.trim().to_string();
+    let valid_probe_urls = !white_url.is_empty()
+        && !gray_url.is_empty()
+        && Url::parse(&white_url).is_ok()
+        && Url::parse(&gray_url).is_ok();
+
     if payload.update_interval_minutes == 0
+        || payload.network_check_interval_minutes == 0
         || payload.ping_timeout_ms < 100
         || payload.ping_timeout_ms > 30_000
         || payload.max_concurrent_pings == 0
         || payload.max_concurrent_pings > 500
         || payload.max_concurrent_tunnels == 0
         || payload.max_concurrent_tunnels > 500
+        || !valid_probe_urls
     {
         return (
             StatusCode::BAD_REQUEST,
@@ -138,12 +163,17 @@ async fn update_config(
         .filter(|url| !url.is_empty())
         .collect::<Vec<_>>();
 
-    let (config_to_save, should_refresh) = {
+    let (config_to_save, should_refresh, network_settings_changed) = {
         let current = state.shared.config.read().await.clone();
+        let network_settings_changed = current.network_check_interval_minutes
+            != payload.network_check_interval_minutes
+            || current.white_url != white_url
+            || current.gray_url != gray_url;
         let should_refresh = current.subscription_urls != sanitized_urls
             || current.ping_timeout_ms != payload.ping_timeout_ms
             || current.max_concurrent_pings != payload.max_concurrent_pings
-            || current.max_concurrent_tunnels != payload.max_concurrent_tunnels;
+            || current.max_concurrent_tunnels != payload.max_concurrent_tunnels
+            || network_settings_changed;
         (
             AppConfig {
                 web_port: current.web_port,
@@ -153,6 +183,9 @@ async fn update_config(
                 ping_timeout_ms: payload.ping_timeout_ms,
                 max_concurrent_pings: payload.max_concurrent_pings,
                 max_concurrent_tunnels: payload.max_concurrent_tunnels,
+                network_check_interval_minutes: payload.network_check_interval_minutes,
+                white_url,
+                gray_url,
                 subscription_urls: sanitized_urls,
                 last_update: current.last_update,
                 nodes_total: current.nodes_total,
@@ -161,6 +194,7 @@ async fn update_config(
                 nodes_after_tunnel: current.nodes_after_tunnel,
             },
             should_refresh,
+            network_settings_changed,
         )
     };
 
@@ -169,6 +203,12 @@ async fn update_config(
             let mut config = state.shared.config.write().await;
             *config = config_to_save;
             drop(config);
+
+            if network_settings_changed {
+                let mut connectivity_state = state.shared.connectivity_state.write().await;
+                connectivity_state.last_check = None;
+            }
+
             if let Err(error) = state.scheduler.reconfigure() {
                 warn!(error = %error, "failed to notify scheduler about config change");
             }
@@ -206,7 +246,7 @@ async fn get_stats(State(state): State<AppState>, headers: HeaderMap) -> impl In
     }
 
     match stats_snapshot(&state.shared).await {
-        Ok((config, next_update, is_updating)) => Json(StatsResponse {
+        Ok((config, next_update, is_updating, connectivity_state)) => Json(StatsResponse {
             last_update: config.last_update,
             next_update,
             nodes_total: config.nodes_total,
@@ -214,6 +254,11 @@ async fn get_stats(State(state): State<AppState>, headers: HeaderMap) -> impl In
             nodes_after_ping: config.nodes_after_ping,
             nodes_after_tunnel: config.nodes_after_tunnel,
             is_updating,
+            network_last_check: connectivity_state.last_check,
+            fallback_to_default_internet: connectivity_state.fallback_to_default_internet,
+            whitelist_mode: connectivity_state.whitelist_mode,
+            white_url_ok: connectivity_state.white_url_ok,
+            gray_url_ok: connectivity_state.gray_url_ok,
         })
         .into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -263,10 +308,22 @@ async fn get_subscription(
     let subscription = encode_subscription(&nodes[..limit]);
 
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"));
-    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
-    headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS"));
-    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, OPTIONS"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Content-Type"),
+    );
 
     (StatusCode::OK, headers, subscription).into_response()
 }
@@ -281,10 +338,15 @@ async fn ws_handler(
     }
 
     let receiver = state.shared.events_tx.subscribe();
-    Ok(ws.on_upgrade(move |socket| handle_ws(socket, receiver)).into_response())
+    Ok(ws
+        .on_upgrade(move |socket| handle_ws(socket, receiver))
+        .into_response())
 }
 
-async fn handle_ws(mut socket: WebSocket, mut receiver: tokio::sync::broadcast::Receiver<UpdateEvent>) {
+async fn handle_ws(
+    mut socket: WebSocket,
+    mut receiver: tokio::sync::broadcast::Receiver<UpdateEvent>,
+) {
     loop {
         tokio::select! {
             message = receiver.recv() => {

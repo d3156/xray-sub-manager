@@ -46,7 +46,18 @@ fn fingerprint_node(node: &Node) -> String {
 fn critical_param_keys(protocol: &Protocol) -> &'static [&'static str] {
     match protocol {
         Protocol::Vmess => &["id", "aid", "net", "path", "host"],
-        Protocol::Vless => &["id", "type", "path", "host", "security", "sni", "serviceName", "flow", "mode", "headerType"],
+        Protocol::Vless => &[
+            "id",
+            "type",
+            "path",
+            "host",
+            "security",
+            "sni",
+            "serviceName",
+            "flow",
+            "mode",
+            "headerType",
+        ],
         Protocol::Trojan => &["password", "sni", "type", "path", "host"],
         Protocol::Shadowsocks => &["method", "password"],
         Protocol::ShadowsocksR => &["method", "password", "protocol", "obfs"],

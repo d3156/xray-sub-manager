@@ -530,6 +530,7 @@
       <div>
         <div class="eyebrow">State Graph</div>
         <h2 style="margin: 8px 0 0; font-size: 1.2rem;">Pipeline flow</h2>
+        <div id="connectivity-stage" class="muted small" style="margin-top: 8px;">Internet checks idle</div>
       </div>
       <div class="graph-chain">
         <article class="card graph-node accent-cyan">
@@ -566,6 +567,12 @@
           <div class="kv-row"><span>Last update</span><strong id="last-update">Never</strong></div>
           <div class="kv-row"><span>Next update</span><strong id="next-update">--</strong></div>
           <div class="kv-row"><span>Status</span><span id="status-pill" class="status-pill"><span class="status-dot"></span><span>Ready</span></span></div>
+          <div class="kv-row"><span>Active interface</span><strong id="active-interface">Modem</strong></div>
+          <div class="kv-row"><span>Fallback</span><strong id="fallback-state">Off</strong></div>
+          <div class="kv-row"><span>White-list mode</span><strong id="whitelist-state">Off</strong></div>
+          <div class="kv-row"><span>White URL check</span><strong id="white-check-state">Not checked</strong></div>
+          <div class="kv-row"><span>Gray URL check</span><strong id="gray-check-state">Not checked</strong></div>
+          <div class="kv-row"><span>Last internet check</span><strong id="network-last-check">Never</strong></div>
         </div>
       </article>
 
@@ -592,6 +599,18 @@
           <label>
             <span>Max parallel tunnels</span>
             <input id="tunnel-parallel-input" type="number" min="1" max="500" required>
+          </label>
+          <label>
+            <span>Internet check interval (minutes)</span>
+            <input id="network-check-interval-input" type="number" min="1" required>
+          </label>
+          <label>
+            <span>White URL (modem health)</span>
+            <input id="white-url-input" type="url" placeholder="https://www.gstatic.com/generate_204" required>
+          </label>
+          <label>
+            <span>Gray URL (white-list detection)</span>
+            <input id="gray-url-input" type="url" placeholder="https://example.com" required>
           </label>
           <button class="btn-primary" type="submit">Save Settings</button>
         </form>
@@ -622,7 +641,8 @@
       pollTimer: null,
       countdownTimer: null,
       ws: null,
-      isAuthenticated: false
+      isAuthenticated: false,
+      connectivityStage: 'Internet checks idle'
     };
 
     const numberFormatter = new Intl.NumberFormat();
@@ -642,17 +662,27 @@
       graphDedup: document.getElementById('graph-dedup'),
       graphPing: document.getElementById('graph-ping'),
       graphResult: document.getElementById('graph-result'),
+      connectivityStage: document.getElementById('connectivity-stage'),
       pingProgress: document.getElementById('ping-progress'),
       tunnelProgress: document.getElementById('tunnel-progress'),
       lastUpdate: document.getElementById('last-update'),
       nextUpdate: document.getElementById('next-update'),
       statusPill: document.getElementById('status-pill'),
+      activeInterface: document.getElementById('active-interface'),
+      fallbackState: document.getElementById('fallback-state'),
+      whitelistState: document.getElementById('whitelist-state'),
+      whiteCheckState: document.getElementById('white-check-state'),
+      grayCheckState: document.getElementById('gray-check-state'),
+      networkLastCheck: document.getElementById('network-last-check'),
       settingsForm: document.getElementById('settings-form'),
       subscriptionUrls: document.getElementById('subscription-urls'),
       intervalInput: document.getElementById('interval-input'),
       timeoutInput: document.getElementById('timeout-input'),
       parallelInput: document.getElementById('parallel-input'),
       tunnelParallelInput: document.getElementById('tunnel-parallel-input'),
+      networkCheckIntervalInput: document.getElementById('network-check-interval-input'),
+      whiteUrlInput: document.getElementById('white-url-input'),
+      grayUrlInput: document.getElementById('gray-url-input'),
       subscriptionUrl: document.getElementById('subscription-url'),
       copyUrl: document.getElementById('copy-url'),
       toggleToken: document.getElementById('toggle-token'),
@@ -729,6 +759,16 @@
       return numberFormatter.format(Number(value || 0));
     }
 
+    function formatProbeStatus(value) {
+      if (value === true) {
+        return 'OK';
+      }
+      if (value === false) {
+        return 'Failed';
+      }
+      return 'Not checked';
+    }
+
     function formatCountdown(target) {
       if (!target) {
         return '--:--:--';
@@ -760,11 +800,34 @@
       els.lastUpdate.textContent = formatDate(stats.last_update);
       els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
       els.countdown.textContent = formatCountdown(state.nextUpdate);
+      els.activeInterface.textContent = stats.fallback_to_default_internet ? 'Default internet' : 'Modem interface';
+      els.fallbackState.textContent = stats.fallback_to_default_internet ? 'ON' : 'Off';
+      els.whitelistState.textContent = stats.whitelist_mode ? 'ON' : 'Off';
+      els.whiteCheckState.textContent = formatProbeStatus(stats.white_url_ok);
+      els.grayCheckState.textContent = formatProbeStatus(stats.gray_url_ok);
+      els.networkLastCheck.textContent = formatDate(stats.network_last_check);
+      els.connectivityStage.textContent = state.connectivityStage;
 
       const updating = Boolean(stats.is_updating);
-      els.statusText.textContent = updating ? 'Update in progress' : 'Ready';
+      if (updating) {
+        els.statusText.textContent = 'Update in progress';
+      } else if (stats.fallback_to_default_internet) {
+        els.statusText.textContent = 'Fallback to default internet';
+      } else if (stats.whitelist_mode) {
+        els.statusText.textContent = 'White-list mode active';
+      } else {
+        els.statusText.textContent = 'Ready';
+      }
       els.statusPill.classList.toggle('updating', updating);
-      els.statusPill.lastElementChild.textContent = updating ? 'Updating...' : 'Ready';
+      if (updating) {
+        els.statusPill.lastElementChild.textContent = 'Updating...';
+      } else if (stats.fallback_to_default_internet) {
+        els.statusPill.lastElementChild.textContent = 'Fallback';
+      } else if (stats.whitelist_mode) {
+        els.statusPill.lastElementChild.textContent = 'White-list';
+      } else {
+        els.statusPill.lastElementChild.textContent = 'Ready';
+      }
       if (!updating && els.pingProgress.textContent.startsWith('Pinging')) {
         els.pingProgress.textContent = 'TCP reachability filter';
       }
@@ -781,6 +844,9 @@
       els.timeoutInput.value = config.ping_timeout_ms;
       els.parallelInput.value = config.max_concurrent_pings;
       els.tunnelParallelInput.value = config.max_concurrent_tunnels || 20;
+      els.networkCheckIntervalInput.value = config.network_check_interval_minutes || 10;
+      els.whiteUrlInput.value = config.white_url || 'https://www.gstatic.com/generate_204';
+      els.grayUrlInput.value = config.gray_url || 'https://example.com';
       renderEndpoint();
     }
 
@@ -828,8 +894,29 @@
         if (data.event === 'tunnel_progress') {
           els.tunnelProgress.textContent = `Testing tunnels ${data.done}/${data.total}`;
         }
+        if (data.event === 'update_started') {
+          state.connectivityStage = 'Preparing internet checks';
+          els.connectivityStage.textContent = state.connectivityStage;
+        }
+        if (data.event === 'connectivity_stage') {
+          state.connectivityStage = data.message || 'Internet checks in progress';
+          els.connectivityStage.textContent = state.connectivityStage;
+        }
+        if (data.event === 'connectivity_result') {
+          if (data.fallback_to_default_internet) {
+            state.connectivityStage = 'Modem internet is down, fallback enabled';
+          } else if (data.whitelist_mode) {
+            state.connectivityStage = 'White-list mode detected on modem';
+          } else {
+            state.connectivityStage = 'Internet checks completed';
+          }
+          els.connectivityStage.textContent = state.connectivityStage;
+          await refreshStats().catch(() => {});
+        }
         if (data.event === 'update_complete') {
           showToast('Update completed');
+          state.connectivityStage = 'Internet checks idle';
+          els.connectivityStage.textContent = state.connectivityStage;
           await refreshStats().catch(() => {});
         }
         if (data.event === 'update_failed') {
@@ -854,6 +941,7 @@
 
     function showLogin() {
       state.isAuthenticated = false;
+      state.connectivityStage = 'Internet checks idle';
       if (state.ws) {
         state.ws.close();
         state.ws = null;
@@ -862,6 +950,9 @@
       clearInterval(state.countdownTimer);
       els.dashboard.classList.add('hidden');
       els.login.classList.remove('hidden');
+      if (els.connectivityStage) {
+        els.connectivityStage.textContent = state.connectivityStage;
+      }
     }
 
     els.loginForm.addEventListener('submit', async (event) => {
@@ -886,7 +977,10 @@
         update_interval_minutes: Number(els.intervalInput.value),
         ping_timeout_ms: Number(els.timeoutInput.value),
         max_concurrent_pings: Number(els.parallelInput.value),
-        max_concurrent_tunnels: Number(els.tunnelParallelInput.value)
+        max_concurrent_tunnels: Number(els.tunnelParallelInput.value),
+        network_check_interval_minutes: Number(els.networkCheckIntervalInput.value),
+        white_url: els.whiteUrlInput.value.trim(),
+        gray_url: els.grayUrlInput.value.trim()
       };
 
       try {
@@ -934,6 +1028,7 @@
 
     async function bootstrap() {
       renderEndpoint();
+      els.connectivityStage.textContent = state.connectivityStage;
       try {
         await refreshStats();
         await showDashboard();

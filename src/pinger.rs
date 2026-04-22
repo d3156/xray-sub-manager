@@ -1,6 +1,17 @@
-use std::{sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Instant};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Instant,
+};
 
-use tokio::{net::TcpStream, sync::Semaphore, task::JoinSet, time::{timeout, Duration}};
+use tokio::{
+    net::TcpStream,
+    sync::Semaphore,
+    task::JoinSet,
+    time::{timeout, Duration},
+};
 use tracing::warn;
 
 use crate::parser::Node;
