@@ -71,6 +71,7 @@ import sys
 import uuid
 
 config = {
+    "schema_version": 1,
     "web_port": 8080,
     "admin_token": str(uuid.uuid4()),
     "subscription_token": str(uuid.uuid4()),
@@ -82,11 +83,12 @@ config = {
     "white_url": "https://www.gstatic.com/generate_204",
     "gray_url": "https://example.com",
     "subscription_urls": [],
-    "last_update": None,
-    "nodes_total": 0,
-    "nodes_after_dedup": 0,
-    "nodes_after_ping": 0,
-    "nodes_after_tunnel": 0,
+    "modems": [
+        {
+            "modem_tag": "default",
+            "modem_interface": "wwan0",
+        }
+    ],
 }
 
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
@@ -111,6 +113,8 @@ ExecStart=/opt/xray-sub-manager/bin/xray-sub-manager
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
 ProtectSystem=strict
 ReadWritePaths=/opt/xray-sub-manager
 

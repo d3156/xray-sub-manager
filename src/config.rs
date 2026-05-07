@@ -1,40 +1,45 @@
 use std::{
+    collections::{BTreeMap, HashSet},
     env,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::warn;
+use url::Url;
 use uuid::Uuid;
 
 use crate::parser::Node;
 
+pub const APP_CONFIG_SCHEMA_VERSION: u32 = 1;
+pub const SUBSCRIPTION_CACHE_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
+    pub schema_version: u32,
     pub web_port: u16,
     pub admin_token: String,
     pub subscription_token: String,
     pub update_interval_minutes: u64,
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
-    #[serde(default = "default_max_concurrent_tunnels")]
     pub max_concurrent_tunnels: usize,
-    #[serde(default = "default_network_check_interval_minutes")]
     pub network_check_interval_minutes: u64,
-    #[serde(default = "default_white_url")]
     pub white_url: String,
-    #[serde(default = "default_gray_url")]
     pub gray_url: String,
     pub subscription_urls: Vec<String>,
-    pub last_update: Option<DateTime<Utc>>,
-    pub nodes_total: usize,
-    pub nodes_after_dedup: usize,
-    pub nodes_after_ping: usize,
-    #[serde(default)]
-    pub nodes_after_tunnel: usize,
+    pub modems: Vec<ModemConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ModemConfig {
+    pub modem_tag: String,
+    pub modem_interface: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -49,27 +54,48 @@ pub struct PublicConfig {
     pub white_url: String,
     pub gray_url: String,
     pub subscription_urls: Vec<String>,
+    pub modems: Vec<ModemConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateConfigRequest {
     pub subscription_urls: Vec<String>,
     pub update_interval_minutes: u64,
     pub ping_timeout_ms: u64,
     pub max_concurrent_pings: usize,
-    #[serde(default = "default_max_concurrent_tunnels")]
     pub max_concurrent_tunnels: usize,
-    #[serde(default = "default_network_check_interval_minutes")]
     pub network_check_interval_minutes: u64,
-    #[serde(default = "default_white_url")]
     pub white_url: String,
-    #[serde(default = "default_gray_url")]
     pub gray_url: String,
+    pub modems: Vec<ModemConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubscriptionCache {
+    pub schema_version: u32,
+    pub last_update: DateTime<Utc>,
+    pub nodes_total: usize,
+    pub nodes_after_dedup: usize,
+    pub by_modem: BTreeMap<String, ModemCacheEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModemCacheEntry {
+    pub modem_tag: String,
+    pub modem_interface: String,
+    pub last_update: DateTime<Utc>,
+    pub nodes_after_ping: usize,
+    pub nodes_after_tunnel: usize,
+    pub nodes: Vec<Node>,
 }
 
 impl AppConfig {
     pub fn new_default() -> Self {
         Self {
+            schema_version: APP_CONFIG_SCHEMA_VERSION,
             web_port: 8080,
             admin_token: Uuid::new_v4().to_string(),
             subscription_token: Uuid::new_v4().to_string(),
@@ -77,15 +103,14 @@ impl AppConfig {
             ping_timeout_ms: 3000,
             max_concurrent_pings: 100,
             max_concurrent_tunnels: 20,
-            network_check_interval_minutes: default_network_check_interval_minutes(),
+            network_check_interval_minutes: 10,
             white_url: default_white_url(),
             gray_url: default_gray_url(),
             subscription_urls: Vec::new(),
-            last_update: None,
-            nodes_total: 0,
-            nodes_after_dedup: 0,
-            nodes_after_ping: 0,
-            nodes_after_tunnel: 0,
+            modems: vec![ModemConfig {
+                modem_tag: "default".to_string(),
+                modem_interface: "wwan0".to_string(),
+            }],
         }
     }
 
@@ -101,16 +126,117 @@ impl AppConfig {
             white_url: self.white_url.clone(),
             gray_url: self.gray_url.clone(),
             subscription_urls: self.subscription_urls.clone(),
+            modems: self.modems.clone(),
         }
+    }
+
+    pub fn sanitized(mut self) -> Self {
+        self.sanitize();
+        self
+    }
+
+    pub fn sanitize(&mut self) {
+        self.white_url = self.white_url.trim().to_string();
+        self.gray_url = self.gray_url.trim().to_string();
+        self.subscription_urls =
+            sanitize_subscription_urls(std::mem::take(&mut self.subscription_urls));
+        for modem in &mut self.modems {
+            modem.modem_tag = modem.modem_tag.trim().to_string();
+            modem.modem_interface = modem.modem_interface.trim().to_string();
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.schema_version != APP_CONFIG_SCHEMA_VERSION {
+            bail!(
+                "unsupported config schema_version {}, expected {}",
+                self.schema_version,
+                APP_CONFIG_SCHEMA_VERSION
+            );
+        }
+        if self.update_interval_minutes == 0 {
+            bail!("update_interval_minutes must be greater than zero");
+        }
+        if self.network_check_interval_minutes == 0 {
+            bail!("network_check_interval_minutes must be greater than zero");
+        }
+        if self.network_check_interval_minutes >= self.update_interval_minutes {
+            bail!("network_check_interval_minutes must be less than update_interval_minutes");
+        }
+        if self.ping_timeout_ms == 0 {
+            bail!("ping_timeout_ms must be greater than zero");
+        }
+        if self.max_concurrent_pings == 0 {
+            bail!("max_concurrent_pings must be greater than zero");
+        }
+        if self.max_concurrent_tunnels == 0 {
+            bail!("max_concurrent_tunnels must be greater than zero");
+        }
+
+        validate_url(&self.white_url, "white_url")?;
+        validate_url(&self.gray_url, "gray_url")?;
+        validate_modems(&self.modems)
     }
 }
 
-fn default_max_concurrent_tunnels() -> usize {
-    20
+impl UpdateConfigRequest {
+    pub fn into_config(self, current: &AppConfig) -> AppConfig {
+        AppConfig {
+            schema_version: APP_CONFIG_SCHEMA_VERSION,
+            web_port: current.web_port,
+            admin_token: current.admin_token.clone(),
+            subscription_token: current.subscription_token.clone(),
+            update_interval_minutes: self.update_interval_minutes,
+            ping_timeout_ms: self.ping_timeout_ms,
+            max_concurrent_pings: self.max_concurrent_pings,
+            max_concurrent_tunnels: self.max_concurrent_tunnels,
+            network_check_interval_minutes: self.network_check_interval_minutes,
+            white_url: self.white_url,
+            gray_url: self.gray_url,
+            subscription_urls: self.subscription_urls,
+            modems: self.modems,
+        }
+        .sanitized()
+    }
 }
 
-fn default_network_check_interval_minutes() -> u64 {
-    10
+impl SubscriptionCache {
+    pub fn empty(now: DateTime<Utc>, nodes_total: usize, nodes_after_dedup: usize) -> Self {
+        Self {
+            schema_version: SUBSCRIPTION_CACHE_SCHEMA_VERSION,
+            last_update: now,
+            nodes_total,
+            nodes_after_dedup,
+            by_modem: BTreeMap::new(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.schema_version != SUBSCRIPTION_CACHE_SCHEMA_VERSION {
+            bail!(
+                "unsupported cache schema_version {}, expected {}",
+                self.schema_version,
+                SUBSCRIPTION_CACHE_SCHEMA_VERSION
+            );
+        }
+
+        for (tag, entry) in &self.by_modem {
+            if tag != &entry.modem_tag {
+                bail!("cache by_modem key {tag} does not match entry modem_tag");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn retain_configured_modems(&mut self, modems: &[ModemConfig]) {
+        let configured_tags = modems
+            .iter()
+            .map(|modem| modem.modem_tag.as_str())
+            .collect::<HashSet<_>>();
+        self.by_modem
+            .retain(|tag, _| configured_tags.contains(tag.as_str()));
+    }
 }
 
 fn default_white_url() -> String {
@@ -119,6 +245,52 @@ fn default_white_url() -> String {
 
 fn default_gray_url() -> String {
     "https://example.com".to_string()
+}
+
+fn sanitize_subscription_urls(urls: Vec<String>) -> Vec<String> {
+    urls.into_iter()
+        .map(|url| url.trim().to_string())
+        .filter(|url| !url.is_empty())
+        .collect()
+}
+
+fn validate_url(value: &str, field: &str) -> Result<()> {
+    let url = Url::parse(value).with_context(|| format!("{field} must be a valid URL"))?;
+    if url.scheme().is_empty() || url.host_str().is_none() {
+        return Err(anyhow!("{field} must include scheme and host"));
+    }
+    Ok(())
+}
+
+pub fn validate_modems(modems: &[ModemConfig]) -> Result<()> {
+    if modems.is_empty() {
+        bail!("at least one modem must be configured");
+    }
+
+    let mut tags = HashSet::new();
+    for modem in modems {
+        if modem.modem_tag.is_empty() {
+            bail!("modem_tag must not be empty");
+        }
+        if !modem
+            .modem_tag
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+        {
+            bail!(
+                "modem_tag {} contains unsupported characters",
+                modem.modem_tag
+            );
+        }
+        if !tags.insert(modem.modem_tag.as_str()) {
+            bail!("duplicate modem_tag {}", modem.modem_tag);
+        }
+        if modem.modem_interface.is_empty() {
+            bail!("modem_interface for {} must not be empty", modem.modem_tag);
+        }
+    }
+
+    Ok(())
 }
 
 pub fn resolve_config_path(cli_arg: Option<String>) -> PathBuf {
@@ -151,17 +323,22 @@ pub async fn load_or_init_config(path: &Path) -> Result<AppConfig> {
         let content = fs::read_to_string(path)
             .await
             .with_context(|| format!("failed to read config file {}", path.display()))?;
-        let config = serde_json::from_str::<AppConfig>(&content)
+        let mut config = serde_json::from_str::<AppConfig>(&content)
             .with_context(|| format!("failed to parse config file {}", path.display()))?;
+        config.sanitize();
+        config
+            .validate()
+            .with_context(|| format!("invalid config file {}", path.display()))?;
         return Ok(config);
     }
 
     let config = AppConfig::new_default();
+    config.validate()?;
     save_config_atomic(path, &config).await?;
     Ok(config)
 }
 
-pub async fn load_nodes_cache(path: &Path) -> Result<Option<Vec<Node>>> {
+pub async fn load_subscription_cache(path: &Path) -> Result<Option<SubscriptionCache>> {
     if !fs::try_exists(path)
         .await
         .context("failed to check subscription cache path")?
@@ -172,8 +349,14 @@ pub async fn load_nodes_cache(path: &Path) -> Result<Option<Vec<Node>>> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("failed to read cache file {}", path.display()))?;
-    match serde_json::from_str::<Vec<Node>>(&content) {
-        Ok(nodes) => Ok(Some(nodes)),
+    match serde_json::from_str::<SubscriptionCache>(&content) {
+        Ok(cache) => match cache.validate() {
+            Ok(()) => Ok(Some(cache)),
+            Err(error) => {
+                warn!(path = %path.display(), error = %error, "ignoring invalid subscription cache");
+                Ok(None)
+            }
+        },
         Err(error) => {
             warn!(path = %path.display(), error = %error, "ignoring incompatible subscription cache");
             Ok(None)
@@ -181,12 +364,15 @@ pub async fn load_nodes_cache(path: &Path) -> Result<Option<Vec<Node>>> {
     }
 }
 
-pub async fn save_nodes_cache(path: &Path, nodes: &[Node]) -> Result<()> {
-    let content = serde_json::to_vec_pretty(nodes).context("failed to serialize nodes cache")?;
+pub async fn save_subscription_cache(path: &Path, cache: &SubscriptionCache) -> Result<()> {
+    cache.validate()?;
+    let content =
+        serde_json::to_vec_pretty(cache).context("failed to serialize subscription cache")?;
     atomic_write(path, &content).await
 }
 
 pub async fn save_config_atomic(path: &Path, config: &AppConfig) -> Result<()> {
+    config.validate()?;
     let content = serde_json::to_vec_pretty(config).context("failed to serialize config")?;
     atomic_write(path, &content).await
 }

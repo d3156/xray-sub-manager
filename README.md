@@ -1,16 +1,17 @@
 # xray-sub-manager
 
-`xray-sub-manager` — сервис на Rust для загрузки подписок Xray/V2Ray, парсинга популярных форматов, дедупликации нод, проверки доступности через асинхронный TCP connect, проверки поднятия тоннеля через `sing-box` и публикации итоговой подписки через веб-панель и `/sub`-эндпоинт.
+`xray-sub-manager` — сервис на Rust для загрузки Xray/V2Ray подписок, парсинга популярных форматов, дедупликации нод, проверки доступности через TCP connect, проверки тоннеля через `sing-box` и публикации итоговых подписок через веб-панель и `/sub`.
 
 ## Возможности
 
-- Поддержка base64-списков URI, plaintext-списков, sing-box JSON и SIP008 JSON
-- Поддержка протоколов `vmess`, `vless`, `trojan`, `ss`, `ssr`, `hysteria2`, `tuic`
-- Асинхронный планировщик обновлений с ручным запуском, кешем и graceful shutdown
-- Сортировка итоговых нод по задержке поднятого тоннеля и выдача top-N через `limit` в `/sub`
-- Встроенный одностраничный веб-интерфейс без внешних зависимостей
-- Атомарное сохранение `config.json` и кеша итоговой подписки
-- Проверка интернета через интерфейс модема с fallback на обычный интернет и детекцией режима white-list
+- Поддержка base64-списков URI, plaintext-списков, sing-box JSON и SIP008 JSON.
+- Поддержка протоколов `vmess`, `vless`, `trojan`, `ss`, `ssr`, `hysteria2`, `tuic`.
+- Несколько логических модемов в `config.json` через `modems[].modem_tag` и `modems[].modem_interface`.
+- TCP ping каждой ноды выполняется отдельно через `SO_BINDTODEVICE` для интерфейса конкретного модема.
+- White/gray health checks выполняются per-modem через `curl --interface <modem_interface>` отдельным частым scheduler-ом.
+- Pipeline строит отдельную cache-ветку для каждого `modem_tag`; одинаковые `modem_interface` разрешены и считаются отдельными ветками.
+- `/sub` умеет отдавать подписку одного модема или объединять cache-ветки всех модемов с per-modem распределением `limit`.
+- Веб-интерфейс показывает modem-aware stats, health-индикацию, SVG fan-out граф и per-modem endpoint links.
 
 ![Пример развертывания](images/image.png)
 
@@ -30,32 +31,71 @@ cargo run --release
 
 ```bash
 CONFIG_PATH=/path/to/config.json cargo run --release
-# или
 cargo run --release -- /path/to/config.json
 ```
 
-Если конфиг отсутствует, приложение создаёт его автоматически и генерирует:
+Если конфиг отсутствует, приложение создаёт новый конфиг актуальной схемы и генерирует `admin_token` и `subscription_token`.
 
-- `admin_token` — токен входа в веб-панель
-- `subscription_token` — токен для `/sub?token=...`
+## Конфиг
+
+Актуальный пример находится в `config.example.json`.
+
+```json
+{
+  "schema_version": 1,
+  "web_port": 8080,
+  "admin_token": "change-me-admin-token",
+  "subscription_token": "change-me-subscription-token",
+  "update_interval_minutes": 60,
+  "ping_timeout_ms": 3000,
+  "max_concurrent_pings": 100,
+  "max_concurrent_tunnels": 20,
+  "network_check_interval_minutes": 10,
+  "white_url": "https://www.gstatic.com/generate_204",
+  "gray_url": "https://example.com",
+  "subscription_urls": ["https://example.com/subscription.txt"],
+  "modems": [
+    { "modem_tag": "tele2", "modem_interface": "wwan0" },
+    { "modem_tag": "mts", "modem_interface": "wwan1" }
+  ]
+}
+```
+
+Правила:
+
+- `schema_version` должен соответствовать текущей схеме.
+- `modem_tag` обязателен, уникален и может содержать только `A-Z`, `a-z`, `0-9`, `_`, `-`.
+- `modem_interface` обязателен; дубли интерфейса разрешены.
+- `network_check_interval_minutes` должен быть больше `0` и меньше `update_interval_minutes`.
+- Runtime-статистика и health state не хранятся в `config.json`; они живут в памяти и в новом `subscription.cache`.
 
 ## Веб-панель
 
-- Откройте `http://127.0.0.1:8080/`
-- Авторизуйтесь с помощью `admin_token` из `config.json`
-- Добавьте URL подписок, сохраните настройки и запустите `Update Now`
+- Откройте `http://127.0.0.1:8080/`.
+- Авторизуйтесь с помощью `admin_token` из `config.json`.
+- Добавьте URL подписок и строки `modem_tag` + `modem_interface` в Settings.
+- Сохраните настройки и запустите `Update Now`.
+- Health checks запускаются сразу при старте и при изменении модемов, `white_url`, `gray_url` или интервала проверки.
 
 ## Эндпоинт подписки
 
-После успешного обновления итоговая base64-подписка доступна по адресу:
+Общая подписка по всем доступным cache-веткам:
 
 ```text
-http://127.0.0.1:8080/sub?token=<subscription_token>&limit=50
+http://127.0.0.1:8080/sub?token=<subscription_token>
+http://127.0.0.1:8080/sub?token=<subscription_token>&limit=5
 ```
 
-`limit` определяет, сколько самых быстрых по задержке тоннеля нод попадёт в экспорт.
+Подписка конкретного модема:
 
-Если кеш ещё не сформирован, `/sub` вернёт `503 Service Unavailable`.
+```text
+http://127.0.0.1:8080/sub?token=<subscription_token>&modem=tele2
+http://127.0.0.1:8080/sub?token=<subscription_token>&limit=5&modem=tele2
+```
+
+Поведение `limit` без `modem`: сервис берёт до `ceil(limit / modem_count)` нод из каждой доступной cache-ветки в порядке `modems` из конфига, объединяет результат и обрезает общий список до `limit`.
+
+Если cache ещё не сформирован, `/sub` вернёт `503 Service Unavailable`. Если `modem` неизвестен или для него нет cache-ветки, `/sub` вернёт `404 Not Found`.
 
 ## Установка как systemd-сервис
 
@@ -65,27 +105,26 @@ sudo ./install.sh
 
 Скрипт установки для Ubuntu:
 
-- автоматически устанавливает необходимые пакеты (`cargo`, `rustc`, `python3`, `build-essential`, `pkg-config`, `libssl-dev` и другие)
-- собирает release-бинарь
-- устанавливает бинарь в `/opt/xray-sub-manager/bin/xray-sub-manager`
-- копирует `static/index.html` в `/opt/xray-sub-manager/static/index.html`
-- создаёт конфиг по умолчанию в `/opt/xray-sub-manager/config.json`, если его ещё нет
-- создаёт и запускает systemd-сервис `xray-sub-manager.service`
-- выводит URL панели и токены из `/opt/xray-sub-manager/config.json`
+- устанавливает необходимые пакеты и `sing-box`;
+- собирает release-бинарь;
+- устанавливает бинарь в `/opt/xray-sub-manager/bin/xray-sub-manager`;
+- создаёт конфиг по умолчанию в `/opt/xray-sub-manager/config.json`, если его ещё нет;
+- создаёт и запускает `xray-sub-manager.service`;
+- добавляет service capabilities `CAP_NET_RAW` и `CAP_NET_ADMIN`, необходимые для interface-bound сетевых операций на Linux.
 
 ## Структура файлов после установки
 
 - Бинарь: `/opt/xray-sub-manager/bin/xray-sub-manager`
 - Конфиг: `/opt/xray-sub-manager/config.json`
 - Кеш подписки: `/opt/xray-sub-manager/subscription.cache`
-- Статика: `/opt/xray-sub-manager/static/index.html`
 
 ## Примечания
 
-- Проверка нод выполняется через TCP connect, а затем через локально поднятый `sing-box`-тоннель
-- Для этапа проверки тоннелей в системе должен быть доступен `sing-box` (путь можно переопределить через `SING_BOX_BIN`)
-- Дополнительная проверка интернета выполняется через `curl` по URL из конфига (`white_url`, `gray_url`) с частотой `network_check_interval_minutes`
-- Если `white_url` через модем недоступен, следующая проверка тоннелей запускается без `bind_interface` (fallback)
-- Если `white_url` доступен, но `gray_url` недоступен, включается режим white-list и проверка тоннелей повторяется
-- Веб-интерфейс вшит в бинарь через `include_str!`
-- Уровень логов можно настроить через `RUST_LOG`, например `RUST_LOG=info cargo run --release`
+- Interface-bound TCP ping использует Linux `SO_BINDTODEVICE` и может требовать capabilities/root privileges.
+- DNS resolution выполняется до interface-bound TCP connect и использует системный resolver.
+- Проверка white/gray URL зависит от установленного `curl` и выполняется строго через `curl --interface <modem_interface>`.
+- Если `white_url` недоступен через модем, branch помечается как offline и не обновляет cache-ветку.
+- Если `white_url` доступен, а `gray_url` недоступен, включается per-modem whitelist mode и tunnel checks повторяются через тот же `modem_interface`.
+- Для проверки тоннелей должен быть доступен `sing-box`; путь можно переопределить через `SING_BOX_BIN`.
+- URL для проверки тоннеля можно переопределить через `TUNNEL_PROBE_URL`.
+- Уровень логов настраивается через `RUST_LOG`, например `RUST_LOG=info`.

@@ -11,12 +11,15 @@ use axum::{
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
-use url::Url;
 
 use crate::{
-    config::{save_config_atomic, AppConfig, UpdateConfigRequest},
+    config::{save_config_atomic, UpdateConfigRequest},
     encoder::encode_subscription,
-    scheduler::{stats_snapshot, subscription_snapshot, SchedulerHandle, SharedState, UpdateEvent},
+    parser::Node,
+    scheduler::{
+        apply_config_prune, stats_snapshot, subscription_cache_snapshot, SchedulerHandle,
+        SharedState, UpdateEvent,
+    },
 };
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
@@ -36,28 +39,13 @@ struct LoginRequest {
 struct SubscriptionQuery {
     token: String,
     limit: Option<usize>,
+    modem: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct BasicResponse {
     ok: bool,
     message: String,
-}
-
-#[derive(Debug, Serialize)]
-struct StatsResponse {
-    last_update: Option<chrono::DateTime<chrono::Utc>>,
-    next_update: Option<chrono::DateTime<chrono::Utc>>,
-    nodes_total: usize,
-    nodes_after_dedup: usize,
-    nodes_after_ping: usize,
-    nodes_after_tunnel: usize,
-    is_updating: bool,
-    network_last_check: Option<chrono::DateTime<chrono::Utc>>,
-    fallback_to_default_internet: bool,
-    whitelist_mode: bool,
-    white_url_ok: Option<bool>,
-    gray_url_ok: Option<bool>,
 }
 
 pub fn build_router(app_state: AppState) -> Router {
@@ -129,94 +117,66 @@ async fn update_config(
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    let white_url = payload.white_url.trim().to_string();
-    let gray_url = payload.gray_url.trim().to_string();
-    let valid_probe_urls = !white_url.is_empty()
-        && !gray_url.is_empty()
-        && Url::parse(&white_url).is_ok()
-        && Url::parse(&gray_url).is_ok();
-
-    if payload.update_interval_minutes == 0
-        || payload.network_check_interval_minutes == 0
-        || payload.ping_timeout_ms < 100
-        || payload.ping_timeout_ms > 30_000
-        || payload.max_concurrent_pings == 0
-        || payload.max_concurrent_pings > 500
-        || payload.max_concurrent_tunnels == 0
-        || payload.max_concurrent_tunnels > 500
-        || !valid_probe_urls
-    {
+    let current = state.shared.config.read().await.clone();
+    let config_to_save = payload.into_config(&current);
+    if let Err(error) = config_to_save.validate() {
         return (
             StatusCode::BAD_REQUEST,
             Json(BasicResponse {
                 ok: false,
-                message: "Invalid configuration values".to_string(),
+                message: error.to_string(),
             }),
         )
             .into_response();
     }
 
-    let sanitized_urls = payload
-        .subscription_urls
-        .into_iter()
-        .map(|url| url.trim().to_string())
-        .filter(|url| !url.is_empty())
-        .collect::<Vec<_>>();
-
-    let (config_to_save, should_refresh, network_settings_changed) = {
-        let current = state.shared.config.read().await.clone();
-        let network_settings_changed = current.network_check_interval_minutes
-            != payload.network_check_interval_minutes
-            || current.white_url != white_url
-            || current.gray_url != gray_url;
-        let should_refresh = current.subscription_urls != sanitized_urls
-            || current.ping_timeout_ms != payload.ping_timeout_ms
-            || current.max_concurrent_pings != payload.max_concurrent_pings
-            || current.max_concurrent_tunnels != payload.max_concurrent_tunnels
-            || network_settings_changed;
-        (
-            AppConfig {
-                web_port: current.web_port,
-                admin_token: current.admin_token,
-                subscription_token: current.subscription_token,
-                update_interval_minutes: payload.update_interval_minutes,
-                ping_timeout_ms: payload.ping_timeout_ms,
-                max_concurrent_pings: payload.max_concurrent_pings,
-                max_concurrent_tunnels: payload.max_concurrent_tunnels,
-                network_check_interval_minutes: payload.network_check_interval_minutes,
-                white_url,
-                gray_url,
-                subscription_urls: sanitized_urls,
-                last_update: current.last_update,
-                nodes_total: current.nodes_total,
-                nodes_after_dedup: current.nodes_after_dedup,
-                nodes_after_ping: current.nodes_after_ping,
-                nodes_after_tunnel: current.nodes_after_tunnel,
-            },
-            should_refresh,
-            network_settings_changed,
-        )
-    };
+    let modems_changed = current.modems != config_to_save.modems;
+    let subscription_settings_changed =
+        current.subscription_urls != config_to_save.subscription_urls;
+    let probe_settings_changed = current.white_url != config_to_save.white_url
+        || current.gray_url != config_to_save.gray_url
+        || current.network_check_interval_minutes != config_to_save.network_check_interval_minutes;
+    let should_refresh = modems_changed
+        || subscription_settings_changed
+        || probe_settings_changed
+        || current.ping_timeout_ms != config_to_save.ping_timeout_ms
+        || current.max_concurrent_pings != config_to_save.max_concurrent_pings
+        || current.max_concurrent_tunnels != config_to_save.max_concurrent_tunnels;
+    let should_check_health = modems_changed || probe_settings_changed;
 
     match save_config_atomic(&state.shared.config_path, &config_to_save).await {
         Ok(()) => {
-            let mut config = state.shared.config.write().await;
-            *config = config_to_save;
-            drop(config);
+            {
+                let mut config = state.shared.config.write().await;
+                *config = config_to_save;
+            }
 
-            if network_settings_changed {
-                let mut connectivity_state = state.shared.connectivity_state.write().await;
-                connectivity_state.last_check = None;
+            if let Err(error) = apply_config_prune(&state.shared).await {
+                warn!(error = %error, "failed to prune runtime state after config update");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(BasicResponse {
+                        ok: false,
+                        message: "Configuration saved, but runtime pruning failed".to_string(),
+                    }),
+                )
+                    .into_response();
             }
 
             if let Err(error) = state.scheduler.reconfigure() {
                 warn!(error = %error, "failed to notify scheduler about config change");
+            }
+            if should_check_health {
+                if let Err(error) = state.scheduler.request_health_check() {
+                    warn!(error = %error, "failed to schedule immediate modem health check");
+                }
             }
             if should_refresh {
                 if let Err(error) = state.scheduler.request_update() {
                     warn!(error = %error, "failed to schedule immediate refresh after config change");
                 }
             }
+
             (
                 StatusCode::OK,
                 Json(BasicResponse {
@@ -246,22 +206,11 @@ async fn get_stats(State(state): State<AppState>, headers: HeaderMap) -> impl In
     }
 
     match stats_snapshot(&state.shared).await {
-        Ok((config, next_update, is_updating, connectivity_state)) => Json(StatsResponse {
-            last_update: config.last_update,
-            next_update,
-            nodes_total: config.nodes_total,
-            nodes_after_dedup: config.nodes_after_dedup,
-            nodes_after_ping: config.nodes_after_ping,
-            nodes_after_tunnel: config.nodes_after_tunnel,
-            is_updating,
-            network_last_check: connectivity_state.last_check,
-            fallback_to_default_internet: connectivity_state.fallback_to_default_internet,
-            whitelist_mode: connectivity_state.whitelist_mode,
-            white_url_ok: connectivity_state.white_url_ok,
-            gray_url_ok: connectivity_state.gray_url_ok,
-        })
-        .into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(stats) => Json(stats).into_response(),
+        Err(error) => {
+            warn!(error = %error, "failed to build stats snapshot");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
@@ -294,19 +243,46 @@ async fn get_subscription(
     State(state): State<AppState>,
     Query(query): Query<SubscriptionQuery>,
 ) -> impl IntoResponse {
-    let config = state.shared.config.read().await;
+    let config = state.shared.config.read().await.clone();
     if query.token != config.subscription_token {
         return StatusCode::UNAUTHORIZED.into_response();
     }
-    drop(config);
 
-    let Some(nodes) = subscription_snapshot(&state.shared).await else {
+    let Some(cache) = subscription_cache_snapshot(&state.shared).await else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
 
-    let limit = query.limit.unwrap_or(nodes.len()).min(nodes.len());
-    let subscription = encode_subscription(&nodes[..limit]);
+    let modem = query
+        .modem
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let nodes = if let Some(modem_tag) = modem {
+        if !config
+            .modems
+            .iter()
+            .any(|modem| modem.modem_tag == modem_tag)
+        {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let Some(entry) = cache.by_modem.get(modem_tag) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        limited_nodes(entry.nodes.clone(), query.limit)
+    } else {
+        let mut available = Vec::new();
+        for modem in &config.modems {
+            if let Some(entry) = cache.by_modem.get(&modem.modem_tag) {
+                available.push(entry.nodes.as_slice());
+            }
+        }
+        if available.is_empty() {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        combine_modem_nodes(&available, query.limit)
+    };
 
+    let subscription = encode_subscription(&nodes);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
@@ -326,6 +302,34 @@ async fn get_subscription(
     );
 
     (StatusCode::OK, headers, subscription).into_response()
+}
+
+fn limited_nodes(mut nodes: Vec<Node>, limit: Option<usize>) -> Vec<Node> {
+    if let Some(limit) = limit {
+        nodes.truncate(limit);
+    }
+    nodes
+}
+
+fn combine_modem_nodes(modem_nodes: &[&[Node]], limit: Option<usize>) -> Vec<Node> {
+    let Some(limit) = limit else {
+        return modem_nodes
+            .iter()
+            .flat_map(|nodes| nodes.iter().cloned())
+            .collect();
+    };
+
+    if limit == 0 || modem_nodes.is_empty() {
+        return Vec::new();
+    }
+
+    let modem_limit = limit.div_ceil(modem_nodes.len());
+    let mut combined = Vec::new();
+    for nodes in modem_nodes {
+        combined.extend(nodes.iter().take(modem_limit).cloned());
+    }
+    combined.truncate(limit);
+    combined
 }
 
 async fn ws_handler(

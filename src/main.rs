@@ -20,7 +20,7 @@ use tokio::{
 use tracing::{error, info};
 
 use crate::{
-    config::{cache_path_for, load_nodes_cache, load_or_init_config, resolve_config_path},
+    config::{cache_path_for, load_or_init_config, load_subscription_cache, resolve_config_path},
     scheduler::{spawn_scheduler, SharedState},
     web::{build_router, AppState},
 };
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
         .await
         .context("failed to load config")?;
     let subscription_cache_path = cache_path_for(&config_path);
-    let cached_subscription = load_nodes_cache(&subscription_cache_path)
+    let cached_subscription = load_subscription_cache(&subscription_cache_path)
         .await
         .context("failed to load subscription cache")?;
 

@@ -6,38 +6,32 @@
   <title>xray-sub-manager</title>
   <style>
     :root {
-      --bg: #0a0a0f;
-      --surface: #111118;
-      --surface-2: #1a1a24;
-      --border: rgba(100, 100, 160, 0.2);
-      --neon-cyan: #00d4ff;
-      --neon-purple: #b44fff;
-      --neon-green: #00ff88;
-      --neon-orange: #ff6b35;
-      --text: #e0e0f0;
-      --text-muted: #8080a0;
-      --danger: #ff4f78;
-      --shadow-cyan: 0 0 20px rgba(0, 212, 255, 0.15);
-      --shadow-purple: 0 0 20px rgba(180, 79, 255, 0.15);
-      --shadow-green: 0 0 20px rgba(0, 255, 136, 0.15);
-      --shadow-orange: 0 0 20px rgba(255, 107, 53, 0.15);
+      --bg: #080a12;
+      --surface: rgba(17, 21, 34, 0.92);
+      --surface-2: rgba(28, 35, 55, 0.88);
+      --border: rgba(127, 157, 255, 0.18);
+      --text: #eef3ff;
+      --muted: #91a0bf;
+      --cyan: #32d9ff;
+      --violet: #a36dff;
+      --green: #4dff9c;
+      --orange: #ffb86b;
+      --red: #ff5f7d;
       --radius: 18px;
+      --shadow: 0 18px 70px rgba(0, 0, 0, 0.35);
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 28%),
-        radial-gradient(circle at top right, rgba(180, 79, 255, 0.12), transparent 24%),
-        linear-gradient(180deg, rgba(17, 17, 24, 0.96), rgba(10, 10, 15, 1));
-      overflow-x: hidden;
+        radial-gradient(circle at 12% 10%, rgba(50, 217, 255, 0.16), transparent 28%),
+        radial-gradient(circle at 92% 8%, rgba(163, 109, 255, 0.18), transparent 26%),
+        linear-gradient(135deg, #070812 0%, #111827 52%, #080a12 100%);
     }
 
     body::before {
@@ -46,411 +40,33 @@
       inset: 0;
       pointer-events: none;
       background-image:
-        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-      background-size: 28px 28px;
-      mask-image: radial-gradient(circle at center, black, transparent 82%);
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(circle at center, black, transparent 78%);
     }
 
-    .hidden {
-      display: none !important;
-    }
+    .hidden { display: none !important; }
 
     .page {
-      width: min(1180px, calc(100% - 32px));
+      width: min(1280px, calc(100% - 28px));
       margin: 0 auto;
-      padding: 24px 0 40px;
+      padding: 22px 0 44px;
     }
 
     .card {
-      background: linear-gradient(180deg, rgba(26, 26, 36, 0.9), rgba(17, 17, 24, 0.92));
+      background: linear-gradient(180deg, var(--surface), rgba(11, 15, 26, 0.9));
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 18px;
-      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
     }
 
-    .accent-cyan { border-color: rgba(0, 212, 255, 0.28); box-shadow: var(--shadow-cyan); }
-    .accent-purple { border-color: rgba(180, 79, 255, 0.28); box-shadow: var(--shadow-purple); }
-    .accent-green { border-color: rgba(0, 255, 136, 0.28); box-shadow: var(--shadow-green); }
-    .accent-orange { border-color: rgba(255, 107, 53, 0.28); box-shadow: var(--shadow-orange); }
-
-    .header {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      margin-bottom: 18px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      color: var(--text);
-    }
-
-    .brand svg {
-      width: 44px;
-      height: 44px;
-      filter: drop-shadow(0 0 16px rgba(0, 212, 255, 0.35));
-    }
-
-    .brand-title {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .brand-title strong {
-      font-size: 1.05rem;
-    }
-
-    .brand-title span {
-      color: var(--text-muted);
-      font-size: 0.82rem;
-    }
-
-    .actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    button,
-    input,
-    textarea {
-      font: inherit;
-    }
-
-    button {
-      border: 1px solid transparent;
-      border-radius: 14px;
-      padding: 11px 15px;
-      cursor: pointer;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.03);
-      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-    }
-
-    button:hover {
-      transform: translateY(-1px);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.08));
-      border-color: rgba(0, 212, 255, 0.4);
-      box-shadow: var(--shadow-cyan);
-    }
-
-    .btn-secondary {
-      border-color: rgba(180, 79, 255, 0.35);
-      background: linear-gradient(135deg, rgba(180, 79, 255, 0.16), rgba(180, 79, 255, 0.05));
-    }
-
-    .btn-danger {
-      border-color: rgba(255, 79, 120, 0.38);
-      background: linear-gradient(135deg, rgba(255, 79, 120, 0.16), rgba(255, 79, 120, 0.05));
-    }
-
-    .stats-grid,
-    .main-grid {
-      display: grid;
-      gap: 16px;
-    }
-
-    .stats-grid {
-      grid-template-columns: repeat(1, minmax(0, 1fr));
-      margin-bottom: 16px;
-    }
-
-    .stat-value {
-      font-size: 2rem;
-      font-weight: 800;
-      margin-top: 10px;
-    }
-
-    .stat-label,
-    .eyebrow,
-    .muted {
-      color: var(--text-muted);
-    }
-
-    .state-graph {
-      display: grid;
-      gap: 12px;
-      margin-bottom: 16px;
-      overflow: visible;
-    }
-
-    .graph-chain {
-      display: grid;
-      gap: 12px;
-      overflow: visible;
-    }
-
-    .graph-node {
-      position: relative;
-      overflow: hidden;
-      animation: fadeUp 0.45s ease;
-      min-height: 148px;
-    }
-
-    .graph-node::after {
-      content: "";
-      position: absolute;
-      inset: auto -30% 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-      animation: scan 2.6s linear infinite;
-    }
-
-    .graph-arrow {
-      position: relative;
-      min-height: 46px;
-      overflow: visible;
-      pointer-events: none;
-    }
-
-    .graph-arrow::before {
-      content: none;
-    }
-
-    .graph-arrow::after {
-      content: ">";
-      position: absolute;
-      left: 50%;
-      top: 0;
-      font-size: 1.7rem;
-      font-weight: 900;
-      line-height: 1;
-      color: var(--neon-cyan);
-      text-shadow: 0 0 16px rgba(0, 212, 255, 0.65);
-      transform: translateX(-50%) rotate(90deg);
-      animation: arrowTravelVertical 1.35s ease-in-out infinite;
-      will-change: transform, opacity;
-    }
-
-    .graph-title {
-      display: block;
-      font-size: 0.82rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    .graph-value {
-      font-size: 1.45rem;
-      font-weight: 800;
-    }
-
-    .main-grid {
-      grid-template-columns: 1fr;
-      margin-bottom: 16px;
-    }
-
-    .form-grid {
-      display: grid;
-      gap: 14px;
-    }
-
-    label {
-      display: grid;
-      gap: 8px;
-      font-size: 0.92rem;
-    }
-
-    input,
-    textarea {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.03);
-      color: var(--text);
-      padding: 12px 13px;
-      outline: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease;
-    }
-
-    input:focus,
-    textarea:focus {
-      border-color: rgba(0, 212, 255, 0.42);
-      box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.08);
-    }
-
-    textarea {
-      min-height: 168px;
-      resize: vertical;
-    }
-
-    .kv {
-      display: grid;
-      gap: 12px;
-    }
-
-    .kv-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .kv-row:last-child {
-      border-bottom: 0;
-      padding-bottom: 0;
-    }
-
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 11px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      font-size: 0.82rem;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      white-space: nowrap;
-      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .status-pill.ready {
-      color: #8effc4;
-      background: rgba(0, 255, 136, 0.1);
-      border-color: rgba(0, 255, 136, 0.4);
-      box-shadow: 0 0 14px rgba(0, 255, 136, 0.18);
-    }
-
-    .status-pill.ready .status-dot {
-      box-shadow: 0 0 12px rgba(0, 255, 136, 0.45);
-    }
-
-    .status-pill.updating {
-      color: #ffd4be;
-      background: rgba(255, 107, 53, 0.12);
-      border-color: rgba(255, 107, 53, 0.44);
-      box-shadow: 0 0 14px rgba(255, 107, 53, 0.2);
-    }
-
-    .status-pill.updating .status-dot {
-      box-shadow: 0 0 12px rgba(255, 107, 53, 0.45);
-      animation: pulse 1.1s infinite;
-    }
-
-    .status-pill.fallback {
-      color: #ffc7d8;
-      background: rgba(255, 79, 120, 0.12);
-      border-color: rgba(255, 79, 120, 0.44);
-      box-shadow: 0 0 14px rgba(255, 79, 120, 0.2);
-    }
-
-    .status-pill.fallback .status-dot {
-      box-shadow: 0 0 12px rgba(255, 79, 120, 0.45);
-    }
-
-    .status-pill.whitelist {
-      color: #e4c8ff;
-      background: rgba(180, 79, 255, 0.12);
-      border-color: rgba(180, 79, 255, 0.44);
-      box-shadow: 0 0 14px rgba(180, 79, 255, 0.2);
-    }
-
-    .status-pill.whitelist .status-dot {
-      box-shadow: 0 0 12px rgba(180, 79, 255, 0.45);
-    }
-
-    .state-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.04);
-      font-size: 0.8rem;
-      font-weight: 700;
-      white-space: nowrap;
-      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .state-badge::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .state-badge.success {
-      color: #8effc4;
-      border-color: rgba(0, 255, 136, 0.36);
-      background: rgba(0, 255, 136, 0.08);
-      box-shadow: 0 0 12px rgba(0, 255, 136, 0.12);
-    }
-
-    .state-badge.warning {
-      color: #ffd4be;
-      border-color: rgba(255, 107, 53, 0.36);
-      background: rgba(255, 107, 53, 0.08);
-      box-shadow: 0 0 12px rgba(255, 107, 53, 0.12);
-    }
-
-    .state-badge.error {
-      color: #ffc7d8;
-      border-color: rgba(255, 79, 120, 0.38);
-      background: rgba(255, 79, 120, 0.08);
-      box-shadow: 0 0 12px rgba(255, 79, 120, 0.12);
-    }
-
-    .state-badge.info {
-      color: #e4c8ff;
-      border-color: rgba(180, 79, 255, 0.38);
-      background: rgba(180, 79, 255, 0.08);
-      box-shadow: 0 0 12px rgba(180, 79, 255, 0.12);
-    }
-
-    .state-badge.neutral {
-      color: #d8d8ec;
-      border-color: rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    .state-badge.muted {
-      color: #a2a2bf;
-      border-color: rgba(128, 128, 160, 0.34);
-      background: rgba(128, 128, 160, 0.12);
-    }
-
-    .endpoint {
-      display: grid;
-      gap: 14px;
-      word-break: break-all;
-    }
-
-    .endpoint-line {
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.87rem;
-    }
-
-    .row-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .pad { padding: 18px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.86rem; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .stack { display: grid; gap: 14px; }
 
     .login-wrap {
       min-height: 100vh;
@@ -461,129 +77,193 @@
 
     .login-card {
       width: min(460px, 100%);
-      padding: 24px;
+      padding: 26px;
     }
 
-    .login-card h1 {
-      margin: 0;
-      font-size: 1.55rem;
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 18px;
     }
 
-    .login-card p {
-      color: var(--text-muted);
-      margin: 6px 0 0;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
     }
 
-    .error {
-      color: var(--danger);
-      min-height: 1.25em;
-      margin-top: 10px;
-    }
-
-    .toast-stack {
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
+    .brand-mark {
+      width: 46px;
+      height: 46px;
       display: grid;
+      place-items: center;
+      border-radius: 16px;
+      color: var(--cyan);
+      background: linear-gradient(135deg, rgba(50, 217, 255, 0.18), rgba(163, 109, 255, 0.15));
+      border: 1px solid rgba(50, 217, 255, 0.28);
+      box-shadow: 0 0 28px rgba(50, 217, 255, 0.16);
+      font-weight: 900;
+    }
+
+    .brand-title { display: grid; gap: 2px; }
+    .brand-title strong { font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-title span { color: var(--muted); font-size: 0.86rem; }
+
+    .actions, .row-actions {
+      display: flex;
       gap: 10px;
-      z-index: 50;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
-    .toast {
-      min-width: 240px;
-      max-width: 360px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(17, 17, 24, 0.96);
-      animation: fadeUp 0.25s ease;
+    button, input, textarea { font: inherit; }
+
+    button {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 13px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
     }
 
-    .toast.success { border-color: rgba(0, 255, 136, 0.3); box-shadow: var(--shadow-green); }
-    .toast.error { border-color: rgba(255, 79, 120, 0.3); box-shadow: 0 0 20px rgba(255, 79, 120, 0.14); }
+    button:hover { transform: translateY(-1px); border-color: rgba(50, 217, 255, 0.46); }
+    .btn-primary { background: rgba(50, 217, 255, 0.14); border-color: rgba(50, 217, 255, 0.34); }
+    .btn-secondary { background: rgba(163, 109, 255, 0.14); border-color: rgba(163, 109, 255, 0.34); }
+    .btn-danger { background: rgba(255, 95, 125, 0.13); border-color: rgba(255, 95, 125, 0.34); }
 
-    .small {
-      font-size: 0.86rem;
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 0.9rem; }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.045);
+      color: var(--text);
+      padding: 11px 12px;
+      outline: none;
     }
 
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.18); opacity: 0.65; }
+    input:focus, textarea:focus {
+      border-color: rgba(50, 217, 255, 0.52);
+      box-shadow: 0 0 0 4px rgba(50, 217, 255, 0.08);
     }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
+    textarea { min-height: 150px; resize: vertical; }
+
+    h1, h2, h3 { margin: 0; }
+    h2 { font-size: 1.12rem; }
+    h3 { font-size: 0.98rem; }
+    .section-head { display: grid; gap: 6px; margin-bottom: 14px; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem; font-weight: 800; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
     }
 
-    @keyframes scan {
-      from { transform: translateX(-20%); }
-      to { transform: translateX(120%); }
+    .summary-card { padding: 16px; }
+    .summary-label { color: var(--muted); font-size: 0.86rem; }
+    .summary-value { font-size: 1.72rem; font-weight: 850; margin-top: 8px; }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .graph-shell { padding: 16px; overflow: hidden; }
+    .graph-scroll { overflow-x: auto; padding-bottom: 4px; }
+    .pipeline-svg { min-width: 980px; width: 100%; height: auto; display: block; }
+    .pipeline-svg .edge { stroke: rgba(145, 160, 191, 0.35); stroke-width: 3; fill: none; }
+    .pipeline-svg .edge.completed { stroke: rgba(77, 255, 156, 0.72); }
+    .pipeline-svg .edge.failed { stroke: rgba(255, 95, 125, 0.75); }
+    .pipeline-svg .edge.active { stroke: rgba(50, 217, 255, 0.9); stroke-dasharray: 9 10; animation: dash 1s linear infinite; }
+    .pipeline-svg rect { fill: rgba(16, 22, 37, 0.96); stroke: rgba(145, 160, 191, 0.42); stroke-width: 1.5; }
+    .pipeline-svg .completed rect { stroke: rgba(77, 255, 156, 0.88); filter: drop-shadow(0 0 10px rgba(77, 255, 156, 0.18)); }
+    .pipeline-svg .failed rect { stroke: rgba(255, 95, 125, 0.9); filter: drop-shadow(0 0 10px rgba(255, 95, 125, 0.2)); }
+    .pipeline-svg .active rect { stroke: rgba(50, 217, 255, 0.96); filter: drop-shadow(0 0 14px rgba(50, 217, 255, 0.28)); animation: pulse-stroke 1.2s ease-in-out infinite; }
+    .pipeline-svg text { fill: var(--text); font-size: 13px; font-weight: 700; }
+    .pipeline-svg .node-subtitle { fill: var(--muted); font-size: 11px; font-weight: 600; }
+
+    .modem-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .modem-card { padding: 16px; display: grid; gap: 14px; }
+    .modem-title { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .kv { display: grid; gap: 9px; }
+    .kv-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .kv-row:last-child { border-bottom: 0; }
+    .kv-row span:first-child { color: var(--muted); }
+    .kv-row strong, .kv-row code { text-align: right; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .badge.success { color: var(--green); background: rgba(77, 255, 156, 0.08); border-color: rgba(77, 255, 156, 0.32); }
+    .badge.warning { color: var(--orange); background: rgba(255, 184, 107, 0.08); border-color: rgba(255, 184, 107, 0.34); }
+    .badge.error { color: var(--red); background: rgba(255, 95, 125, 0.08); border-color: rgba(255, 95, 125, 0.36); }
+    .badge.info { color: var(--violet); background: rgba(163, 109, 255, 0.08); border-color: rgba(163, 109, 255, 0.34); }
+    .badge.muted { color: var(--muted); background: rgba(145, 160, 191, 0.08); border-color: rgba(145, 160, 191, 0.24); }
+    .badge.active::before { animation: pulse-dot 1s ease-in-out infinite; }
+
+    .form-grid { display: grid; gap: 13px; }
+    .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .modem-list { display: grid; gap: 10px; }
+    .modem-row { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: end; padding: 12px; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: rgba(255,255,255,0.035); }
+
+    .endpoint-list { display: grid; gap: 10px; }
+    .endpoint-row { display: grid; gap: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; background: rgba(255,255,255,0.035); }
+    .endpoint-url { word-break: break-all; color: #d9e6ff; }
+    .error { color: var(--red); min-height: 1.2em; }
+
+    .toast-stack { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 10px; z-index: 50; }
+    .toast { min-width: 240px; max-width: 360px; border-radius: 14px; padding: 13px 15px; background: rgba(9, 13, 24, 0.96); border: 1px solid rgba(77,255,156,0.28); box-shadow: var(--shadow); }
+    .toast.error { border-color: rgba(255,95,125,0.38); }
+
+    @keyframes dash { to { stroke-dashoffset: -19; } }
+    @keyframes pulse-stroke { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
+    @keyframes pulse-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.55; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
     }
 
     @media (min-width: 760px) {
-      .header {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .stats-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
-
-      .graph-chain {
-        grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr);
-        align-items: stretch;
-      }
-
-      .graph-arrow {
-        min-height: auto;
-      }
-
-      .graph-arrow::after {
-        left: 4px;
-        top: 50%;
-        transform: translateY(-50%);
-        animation: arrowTravelHorizontal 1.35s ease-in-out infinite;
-      }
-
-      .main-grid {
-        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-      }
-    }
-
-    @keyframes arrowTravelVertical {
-      0% { transform: translateX(-50%) translateY(0) rotate(90deg); opacity: 0; }
-      20% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { transform: translateX(-50%) translateY(18px) rotate(90deg); opacity: 0; }
-    }
-
-    @keyframes arrowTravelHorizontal {
-      0% { transform: translateY(-50%) translateX(0); opacity: 0; }
-      20% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { transform: translateY(-50%) translateX(28px); opacity: 0; }
+      .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .layout-grid { grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr); }
+      .modem-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .modem-row { grid-template-columns: 1fr 1fr auto; }
     }
   </style>
 </head>
 <body>
   <section id="login" class="login-wrap">
-    <div class="card accent-cyan login-card">
+    <div class="card login-card stack">
       <div class="brand">
-        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-          <path d="M32 6 11 18v14c0 13 8.8 24.7 21 27 12.2-2.3 21-14 21-27V18L32 6Z" stroke="#00d4ff" stroke-width="3"/>
-          <path d="M22 32h20M32 22v20" stroke="#b44fff" stroke-width="3" stroke-linecap="round"/>
-        </svg>
+        <div class="brand-mark">X</div>
         <div class="brand-title">
           <strong>xray-sub-manager</strong>
           <span>Proxy subscription control panel</span>
         </div>
       </div>
-      <form id="login-form" class="form-grid" style="margin-top: 22px;">
+      <form id="login-form" class="form-grid">
         <label>
-          <span>🔑 Access Token</span>
+          <span>Admin token</span>
           <input id="token-input" type="password" autocomplete="off" placeholder="Enter admin token" required>
         </label>
         <button class="btn-primary" type="submit">Enter</button>
@@ -593,142 +273,120 @@
   </section>
 
   <main id="dashboard" class="page hidden">
-    <header class="header card accent-cyan">
+    <header class="header card">
       <div class="brand">
-        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-          <path d="M32 6 11 18v14c0 13 8.8 24.7 21 27 12.2-2.3 21-14 21-27V18L32 6Z" stroke="#00d4ff" stroke-width="3"/>
-          <circle cx="32" cy="32" r="9" stroke="#00ff88" stroke-width="3"/>
-          <path d="M32 19v6M45 32h-6M32 45v-6M19 32h6" stroke="#b44fff" stroke-width="3" stroke-linecap="round"/>
-        </svg>
+        <div class="brand-mark">X</div>
         <div class="brand-title">
           <strong>xray-sub-manager</strong>
           <span id="status-text">Ready</span>
         </div>
       </div>
       <div class="actions">
-        <button id="update-now" class="btn-primary" type="button">↻ Update Now</button>
+        <button id="update-now" class="btn-primary" type="button">Update Now</button>
         <button id="logout" class="btn-danger" type="button">Logout</button>
       </div>
     </header>
 
-    <section class="stats-grid">
-      <article class="card accent-cyan">
-        <div class="stat-label">📡 Total Nodes</div>
-        <div id="total-nodes" class="stat-value">0</div>
+    <section class="summary-grid">
+      <article class="card summary-card">
+        <div class="summary-label">Fetched nodes</div>
+        <div id="total-nodes" class="summary-value">0</div>
       </article>
-      <article class="card accent-purple">
-        <div class="stat-label">🔗 After Dedup</div>
-        <div id="dedup-nodes" class="stat-value">0</div>
+      <article class="card summary-card">
+        <div class="summary-label">After dedup</div>
+        <div id="dedup-nodes" class="summary-value">0</div>
       </article>
-      <article class="card accent-green">
-        <div class="stat-label">✅ After Tunnel</div>
-        <div id="online-nodes" class="stat-value">0</div>
+      <article class="card summary-card">
+        <div class="summary-label">Cached nodes</div>
+        <div id="cached-nodes" class="summary-value">0</div>
       </article>
-      <article class="card accent-orange">
-        <div class="stat-label">⏱ Next Update</div>
-        <div id="countdown" class="stat-value" style="font-size: 1.35rem;">--:--:--</div>
+      <article class="card summary-card">
+        <div class="summary-label">Next update</div>
+        <div id="countdown" class="summary-value" style="font-size: 1.25rem;">--:--:--</div>
       </article>
     </section>
 
-    <section class="card state-graph">
-      <div>
-        <div class="eyebrow">State Graph</div>
-        <h2 style="margin: 8px 0 0; font-size: 1.2rem;">Pipeline flow</h2>
-        <div id="connectivity-stage" class="muted small" style="margin-top: 8px;">Internet checks idle</div>
+    <section class="card graph-shell">
+      <div class="section-head">
+        <div class="eyebrow">Pipeline graph</div>
+        <h2>Fetch, dedup and per-modem branches</h2>
+        <div id="graph-caption" class="muted small">Waiting for stats</div>
       </div>
-      <div class="graph-chain">
-        <article class="card graph-node accent-cyan">
-          <span class="graph-title">Fetched</span>
-          <div id="graph-fetched" class="graph-value">0 nodes</div>
-          <div class="muted small">All parsed nodes before filtering</div>
-        </article>
-        <div class="graph-arrow" aria-hidden="true"></div>
-        <article class="card graph-node accent-purple">
-          <span class="graph-title">Dedup</span>
-          <div id="graph-dedup" class="graph-value">0 dupes removed</div>
-          <div class="muted small">Removed fingerprint collisions</div>
-        </article>
-        <div class="graph-arrow" aria-hidden="true"></div>
-        <article class="card graph-node accent-orange">
-          <span class="graph-title">Ping</span>
-          <div id="graph-ping" class="graph-value">0 offline filtered</div>
-          <div id="ping-progress" class="muted small">TCP reachability filter</div>
-        </article>
-        <div class="graph-arrow" aria-hidden="true"></div>
-        <article class="card graph-node accent-green">
-          <span class="graph-title">Result</span>
-          <div id="graph-result" class="graph-value">0 nodes</div>
-          <div id="tunnel-progress" class="muted small">Fastest tunnel shortlist</div>
-        </article>
-      </div>
+      <div id="pipeline-graph" class="graph-scroll"></div>
     </section>
 
-    <section class="main-grid">
-      <article class="card accent-purple">
-        <div class="eyebrow">Update Info</div>
-        <h2 style="margin: 8px 0 16px; font-size: 1.2rem;">Runtime status</h2>
-        <div class="kv">
-          <div class="kv-row"><span>Last update</span><strong id="last-update">Never</strong></div>
-          <div class="kv-row"><span>Next update</span><strong id="next-update">--</strong></div>
-          <div class="kv-row"><span>Status</span><span id="status-pill" class="status-pill ready" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-pill-label">Normal operation</span></span></div>
-          <div class="kv-row"><span>Active interface</span><span id="active-interface" class="state-badge success">Modem interface</span></div>
-          <div class="kv-row"><span>Fallback</span><span id="fallback-state" class="state-badge neutral">Disabled</span></div>
-          <div class="kv-row"><span>White-list mode</span><span id="whitelist-state" class="state-badge neutral">Disabled</span></div>
-          <div class="kv-row"><span>White URL check</span><span id="white-check-state" class="state-badge muted">Not checked</span></div>
-          <div class="kv-row"><span>Gray URL check</span><span id="gray-check-state" class="state-badge muted">Not checked</span></div>
-          <div class="kv-row"><span>Last internet check</span><strong id="network-last-check">Never</strong></div>
+    <section class="layout-grid">
+      <article class="card pad stack">
+        <div class="section-head">
+          <div class="eyebrow">Modem status</div>
+          <h2>Update info per modem</h2>
         </div>
+        <div id="modem-cards" class="modem-grid"></div>
       </article>
 
-      <article class="card accent-cyan">
-        <div class="eyebrow">Settings</div>
-        <h2 style="margin: 8px 0 16px; font-size: 1.2rem;">Subscription sources</h2>
+      <article class="card pad stack">
+        <div class="section-head">
+          <div class="eyebrow">Settings</div>
+          <h2>Subscription sources and modem interfaces</h2>
+        </div>
         <form id="settings-form" class="form-grid">
           <label>
             <span>Subscription URLs</span>
             <textarea id="subscription-urls" placeholder="https://example.com/sub1&#10;https://example.com/sub2"></textarea>
           </label>
           <label>
-            <span>Update interval (minutes)</span>
+            <span>Update interval, minutes</span>
             <input id="interval-input" type="number" min="1" required>
           </label>
           <label>
-            <span>Ping timeout (ms)</span>
-            <input id="timeout-input" type="number" min="100" max="30000" required>
+            <span>Ping timeout, ms</span>
+            <input id="timeout-input" type="number" min="1" required>
           </label>
           <label>
             <span>Max parallel pings</span>
-            <input id="parallel-input" type="number" min="1" max="500" required>
+            <input id="parallel-input" type="number" min="1" required>
           </label>
           <label>
             <span>Max parallel tunnels</span>
-            <input id="tunnel-parallel-input" type="number" min="1" max="500" required>
+            <input id="tunnel-parallel-input" type="number" min="1" required>
           </label>
           <label>
-            <span>Internet check interval (minutes)</span>
+            <span>Health check interval, minutes</span>
             <input id="network-check-interval-input" type="number" min="1" required>
           </label>
           <label>
-            <span>White URL (modem health)</span>
+            <span>White URL</span>
             <input id="white-url-input" type="url" placeholder="https://www.gstatic.com/generate_204" required>
           </label>
           <label>
-            <span>Gray URL (white-list detection)</span>
+            <span>Gray URL</span>
             <input id="gray-url-input" type="url" placeholder="https://example.com" required>
           </label>
+
+          <div class="stack">
+            <div class="section-head" style="margin-bottom: 0;">
+              <div class="eyebrow">Modem interfaces</div>
+              <div class="muted small">Tags must be unique. Duplicate interfaces are allowed.</div>
+            </div>
+            <div id="modem-list" class="modem-list"></div>
+            <div class="settings-actions">
+              <button id="add-modem" class="btn-secondary" type="button">Add modem</button>
+            </div>
+          </div>
+
           <button class="btn-primary" type="submit">Save Settings</button>
         </form>
       </article>
     </section>
 
-    <section class="card accent-green endpoint">
-      <div>
-        <div class="eyebrow">Subscription Endpoint</div>
-        <h2 style="margin: 8px 0 0; font-size: 1.2rem;">Client URL</h2>
+    <section class="card pad stack" style="margin-top: 16px;">
+      <div class="section-head">
+        <div class="eyebrow">Subscription endpoint</div>
+        <h2>Client URLs</h2>
+        <div class="muted small">Limit is configured in the link. Per-modem links use the modem tag.</div>
       </div>
-      <div id="subscription-url" class="endpoint-line">/sub?token=••••••••••••••••••••</div>
+      <div id="endpoint-list" class="endpoint-list"></div>
       <div class="row-actions">
-        <button id="copy-url" class="btn-primary" type="button">Copy URL</button>
         <button id="toggle-token" class="btn-secondary" type="button">Show Token</button>
       </div>
     </section>
@@ -740,13 +398,13 @@
     const state = {
       tokenVisible: false,
       subscriptionToken: '',
-      lastStats: null,
+      config: null,
+      stats: null,
       nextUpdate: null,
       pollTimer: null,
       countdownTimer: null,
       ws: null,
-      isAuthenticated: false,
-      connectivityStage: 'Internet checks idle'
+      isAuthenticated: false
     };
 
     const numberFormatter = new Intl.NumberFormat();
@@ -760,25 +418,11 @@
       statusText: document.getElementById('status-text'),
       totalNodes: document.getElementById('total-nodes'),
       dedupNodes: document.getElementById('dedup-nodes'),
-      onlineNodes: document.getElementById('online-nodes'),
+      cachedNodes: document.getElementById('cached-nodes'),
       countdown: document.getElementById('countdown'),
-      graphFetched: document.getElementById('graph-fetched'),
-      graphDedup: document.getElementById('graph-dedup'),
-      graphPing: document.getElementById('graph-ping'),
-      graphResult: document.getElementById('graph-result'),
-      connectivityStage: document.getElementById('connectivity-stage'),
-      pingProgress: document.getElementById('ping-progress'),
-      tunnelProgress: document.getElementById('tunnel-progress'),
-      lastUpdate: document.getElementById('last-update'),
-      nextUpdate: document.getElementById('next-update'),
-      statusPill: document.getElementById('status-pill'),
-      statusPillLabel: document.getElementById('status-pill-label'),
-      activeInterface: document.getElementById('active-interface'),
-      fallbackState: document.getElementById('fallback-state'),
-      whitelistState: document.getElementById('whitelist-state'),
-      whiteCheckState: document.getElementById('white-check-state'),
-      grayCheckState: document.getElementById('gray-check-state'),
-      networkLastCheck: document.getElementById('network-last-check'),
+      graphCaption: document.getElementById('graph-caption'),
+      pipelineGraph: document.getElementById('pipeline-graph'),
+      modemCards: document.getElementById('modem-cards'),
       settingsForm: document.getElementById('settings-form'),
       subscriptionUrls: document.getElementById('subscription-urls'),
       intervalInput: document.getElementById('interval-input'),
@@ -788,8 +432,9 @@
       networkCheckIntervalInput: document.getElementById('network-check-interval-input'),
       whiteUrlInput: document.getElementById('white-url-input'),
       grayUrlInput: document.getElementById('gray-url-input'),
-      subscriptionUrl: document.getElementById('subscription-url'),
-      copyUrl: document.getElementById('copy-url'),
+      modemList: document.getElementById('modem-list'),
+      addModem: document.getElementById('add-modem'),
+      endpointList: document.getElementById('endpoint-list'),
       toggleToken: document.getElementById('toggle-token'),
       updateNow: document.getElementById('update-now'),
       logout: document.getElementById('logout'),
@@ -805,22 +450,15 @@
         },
         ...options
       });
-
-      let data = null;
       const text = await response.text();
+      let data = null;
       if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch (_) {
-          data = text;
-        }
+        try { data = JSON.parse(text); } catch (_) { data = text; }
       }
-
       if (!response.ok) {
         const message = data && data.message ? data.message : `Request failed: ${response.status}`;
         throw new Error(message);
       }
-
       return data;
     }
 
@@ -829,158 +467,241 @@
       toast.className = `toast ${type}`;
       toast.textContent = message;
       els.toastStack.appendChild(toast);
-      setTimeout(() => {
-        toast.remove();
-      }, 3000);
+      setTimeout(() => toast.remove(), 3200);
     }
 
-    function maskToken(token) {
-      return token ? '•'.repeat(Math.min(token.length, 24)) : '••••••••';
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
-    function endpointUrl() {
-      const token = state.tokenVisible ? state.subscriptionToken : maskToken(state.subscriptionToken);
-      const origin = window.location.origin;
-      return `${origin}/sub?token=${token || maskToken('')}`;
-    }
-
-    function renderEndpoint() {
-      els.subscriptionUrl.textContent = endpointUrl();
-      els.toggleToken.textContent = state.tokenVisible ? 'Hide Token' : 'Show Token';
-    }
+    function formatNumber(value) { return numberFormatter.format(Number(value || 0)); }
 
     function formatDate(value) {
-      if (!value) {
-        return 'Never';
-      }
+      if (!value) return 'Never';
       const date = new Date(value);
-      if (Number.isNaN(date.getTime())) {
-        return value;
-      }
+      if (Number.isNaN(date.getTime())) return value;
       return date.toLocaleString();
     }
 
-    function formatNumber(value) {
-      return numberFormatter.format(Number(value || 0));
-    }
-
-    function resolveProbeState(value) {
-      if (value === true) {
-        return { label: 'Reachable', tone: 'success' };
-      }
-      if (value === false) {
-        return { label: 'Failed', tone: 'error' };
-      }
-      return { label: 'Not checked', tone: 'muted' };
-    }
-
-    function setStateBadge(element, state) {
-      element.classList.remove('success', 'warning', 'error', 'info', 'neutral', 'muted');
-      element.classList.add('state-badge', state.tone);
-      element.textContent = state.label;
-    }
-
-    function resolveRuntimeStatus(stats) {
-      if (stats.is_updating) {
-        return {
-          mode: 'updating',
-          shortText: 'Updating',
-          longText: 'Update in progress'
-        };
-      }
-      if (stats.fallback_to_default_internet) {
-        return {
-          mode: 'fallback',
-          shortText: 'Fallback mode',
-          longText: 'Using default internet'
-        };
-      }
-      if (stats.whitelist_mode) {
-        return {
-          mode: 'whitelist',
-          shortText: 'White-list mode',
-          longText: 'Restricted modem access'
-        };
-      }
-      return {
-        mode: 'ready',
-        shortText: 'Ready',
-        longText: 'Normal operation'
-      };
-    }
-
-    function formatCountdown(target) {
-      if (!target) {
-        return '--:--:--';
-      }
+    function formatDuration(target) {
+      if (!target) return '--:--:--';
       const diff = Math.max(0, target.getTime() - Date.now());
-      const totalSeconds = Math.floor(diff / 1000);
-      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      const total = Math.floor(diff / 1000);
+      const hours = String(Math.floor(total / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+      const seconds = String(total % 60).padStart(2, '0');
       return `${hours}:${minutes}:${seconds}`;
     }
 
-    function renderStats(stats) {
-      state.lastStats = stats;
-      state.nextUpdate = stats.next_update ? new Date(stats.next_update) : null;
+    function tokenForDisplay() {
+      if (state.tokenVisible) return state.subscriptionToken;
+      const length = Math.min(Math.max(state.subscriptionToken.length, 12), 24);
+      return '*'.repeat(length);
+    }
 
-      const removedDupes = Math.max(0, stats.nodes_total - stats.nodes_after_dedup);
-      const removedOffline = Math.max(0, stats.nodes_after_dedup - stats.nodes_after_ping);
-      const removedByTunnel = Math.max(0, stats.nodes_after_ping - (stats.nodes_after_tunnel || 0));
+    function buildSubUrl(params = {}, visible = true) {
+      const url = new URL('/sub', window.location.origin);
+      url.searchParams.set('token', visible ? tokenForDisplay() : state.subscriptionToken);
+      if (params.limit !== undefined) url.searchParams.set('limit', params.limit);
+      if (params.modem) url.searchParams.set('modem', params.modem);
+      return url.toString();
+    }
+
+    function badge(label, tone = 'muted', active = false) {
+      return `<span class="badge ${tone}${active ? ' active' : ''}">${escapeHtml(label)}</span>`;
+    }
+
+    function probeLabel(value) {
+      if (value === true) return badge('OK', 'success');
+      if (value === false) return badge('Failed', 'error');
+      return badge('Not checked', 'muted');
+    }
+
+    function healthState(modem) {
+      if (modem.health_check_in_progress) return { label: 'Checking', tone: 'info', active: true };
+      if (modem.health_last_error && modem.white_url_ok !== true) return { label: 'Error', tone: 'error' };
+      if (modem.modem_online === false) return { label: 'Offline', tone: 'error' };
+      if (modem.whitelist_mode) return { label: 'Whitelist', tone: 'info' };
+      if (modem.health_last_error) return { label: 'Error', tone: 'error' };
+      if (isHealthStale(modem)) return { label: 'Stale', tone: 'warning' };
+      if (modem.white_url_ok === true && modem.gray_url_ok === true) return { label: 'Online', tone: 'success' };
+      return { label: 'Not checked', tone: 'muted' };
+    }
+
+    function isHealthStale(modem) {
+      if (!modem.network_next_check || modem.health_check_in_progress) return false;
+      const next = new Date(modem.network_next_check).getTime();
+      return Number.isFinite(next) && Date.now() > next + 60_000;
+    }
+
+    function renderStats(stats) {
+      state.stats = stats;
+      state.nextUpdate = stats.next_update ? new Date(stats.next_update) : null;
+      const modems = stats.modems || [];
+      const cachedTotal = modems.reduce((sum, modem) => sum + Number(modem.cached_nodes || modem.nodes_after_tunnel || 0), 0);
 
       els.totalNodes.textContent = formatNumber(stats.nodes_total);
       els.dedupNodes.textContent = formatNumber(stats.nodes_after_dedup);
-      els.onlineNodes.textContent = formatNumber(stats.nodes_after_tunnel || 0);
-      els.graphFetched.textContent = `${formatNumber(stats.nodes_total)} nodes`;
-      els.graphDedup.textContent = `${formatNumber(removedDupes)} dupes removed`;
-      els.graphPing.textContent = `${formatNumber(removedOffline)} offline filtered`;
-      els.graphResult.textContent = `${formatNumber(stats.nodes_after_tunnel || 0)} nodes`;
-      els.tunnelProgress.textContent = `${formatNumber(removedByTunnel)} tunnels filtered`;
-      els.lastUpdate.textContent = formatDate(stats.last_update);
-      els.nextUpdate.textContent = stats.next_update ? formatDate(stats.next_update) : 'Waiting';
-      els.countdown.textContent = formatCountdown(state.nextUpdate);
-      setStateBadge(els.activeInterface, stats.fallback_to_default_internet
-        ? { label: 'Default internet', tone: 'warning' }
-        : { label: 'Modem interface', tone: 'success' });
-      setStateBadge(els.fallbackState, stats.fallback_to_default_internet
-        ? { label: 'Enabled', tone: 'warning' }
-        : { label: 'Disabled', tone: 'neutral' });
-      setStateBadge(els.whitelistState, stats.whitelist_mode
-        ? { label: 'Enabled', tone: 'info' }
-        : { label: 'Disabled', tone: 'neutral' });
-      setStateBadge(els.whiteCheckState, resolveProbeState(stats.white_url_ok));
-      setStateBadge(els.grayCheckState, resolveProbeState(stats.gray_url_ok));
-      els.networkLastCheck.textContent = formatDate(stats.network_last_check);
-      els.connectivityStage.textContent = state.connectivityStage;
+      els.cachedNodes.textContent = formatNumber(cachedTotal);
+      els.countdown.textContent = formatDuration(state.nextUpdate);
+      els.statusText.textContent = stats.is_updating ? `Updating: ${stats.stage}` : 'Ready';
+      els.graphCaption.textContent = stats.is_updating
+        ? `Update in progress, stage: ${stats.stage}`
+        : `Last update: ${formatDate(stats.last_update)}`;
 
-      const runtimeStatus = resolveRuntimeStatus(stats);
-      els.statusText.textContent = runtimeStatus.shortText;
-      els.statusPill.classList.remove('ready', 'updating', 'fallback', 'whitelist');
-      els.statusPill.classList.add(runtimeStatus.mode);
-      els.statusPillLabel.textContent = runtimeStatus.longText;
+      renderGraph(stats);
+      renderModemCards(stats);
+      renderEndpoints();
+    }
 
-      const updating = runtimeStatus.mode === 'updating';
-      if (!updating && els.pingProgress.textContent.startsWith('Pinging')) {
-        els.pingProgress.textContent = 'TCP reachability filter';
+    function renderGraph(stats) {
+      const modems = stats.modems && stats.modems.length ? stats.modems : [];
+      const laneHeight = 112;
+      const top = 34;
+      const height = Math.max(220, top + Math.max(modems.length, 1) * laneHeight + 34);
+      const width = 980;
+      const midY = top + Math.max(modems.length, 1) * laneHeight / 2 - 28;
+      const nodes = [];
+      const edges = [];
+
+      const commonFetch = graphStatus(stats.is_updating && stats.stage === 'fetch', stats.nodes_total > 0, false);
+      const commonDedup = graphStatus(stats.is_updating && stats.stage === 'dedup', stats.nodes_after_dedup > 0, false);
+      nodes.push(svgNode('Fetch', `${formatNumber(stats.nodes_total)} nodes`, 28, midY, commonFetch));
+      nodes.push(svgNode('Dedup', `${formatNumber(Math.max(0, stats.nodes_total - stats.nodes_after_dedup))} removed`, 198, midY, commonDedup));
+      edges.push(svgEdge(148, midY + 31, 198, midY + 31, commonDedup));
+
+      if (!modems.length) {
+        nodes.push(svgNode('No modems', 'Configure at least one', 420, midY, 'pending'));
       }
-      if (!updating && els.tunnelProgress.textContent.startsWith('Testing tunnels')) {
-        els.tunnelProgress.textContent = `${formatNumber(removedByTunnel)} tunnels filtered`;
+
+      modems.forEach((modem, index) => {
+        const y = top + index * laneHeight;
+        const health = healthState(modem);
+        const healthStatus = health.tone === 'error' ? 'failed' : health.active ? 'active' : modem.network_last_check ? 'completed' : 'pending';
+        const pingStatus = stageNodeStatus(modem, 'ping');
+        const tunnelStatus = stageNodeStatus(modem, 'tunnel');
+        const resultStatus = modem.last_error ? 'failed' : modem.cached_nodes > 0 || modem.stage === 'complete' ? 'completed' : 'pending';
+        const laneLabel = `${modem.modem_tag} / ${modem.modem_interface}`;
+
+        nodes.push(svgLaneLabel(laneLabel, 362, y - 8));
+        nodes.push(svgNode('Health', health.label, 362, y + 16, healthStatus));
+        nodes.push(svgNode('TCP Ping', `${formatNumber(modem.ping_done)}/${formatNumber(modem.ping_total)}`, 522, y + 16, pingStatus));
+        nodes.push(svgNode('Tunnel', `${formatNumber(modem.tunnel_done)}/${formatNumber(modem.tunnel_total)}`, 682, y + 16, tunnelStatus));
+        nodes.push(svgNode('Result', `${formatNumber(modem.cached_nodes || modem.nodes_after_tunnel)} nodes`, 842, y + 16, resultStatus));
+        edges.push(svgEdge(318, midY + 31, 362, y + 47, healthStatus));
+        edges.push(svgEdge(482, y + 47, 522, y + 47, pingStatus));
+        edges.push(svgEdge(642, y + 47, 682, y + 47, tunnelStatus));
+        edges.push(svgEdge(802, y + 47, 842, y + 47, resultStatus));
+      });
+
+      els.pipelineGraph.innerHTML = `<svg class="pipeline-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Pipeline graph">${edges.join('')}${nodes.join('')}</svg>`;
+    }
+
+    function graphStatus(active, completed, failed) {
+      if (failed) return 'failed';
+      if (active) return 'active';
+      if (completed) return 'completed';
+      return 'pending';
+    }
+
+    function stageNodeStatus(modem, stage) {
+      if (modem.stage === 'failed' || modem.stage === 'skipped') return 'failed';
+      if (modem.stage === stage) return 'active';
+      if (stage === 'ping' && (modem.nodes_after_ping > 0 || ['tunnel', 'complete'].includes(modem.stage))) return 'completed';
+      if (stage === 'tunnel' && (modem.nodes_after_tunnel > 0 || modem.stage === 'complete')) return 'completed';
+      return 'pending';
+    }
+
+    function svgNode(title, subtitle, x, y, status) {
+      return `<g class="${status}"><rect x="${x}" y="${y}" rx="16" ry="16" width="120" height="62"></rect><text x="${x + 16}" y="${y + 25}">${escapeHtml(title)}</text><text class="node-subtitle" x="${x + 16}" y="${y + 46}">${escapeHtml(subtitle)}</text></g>`;
+    }
+
+    function svgLaneLabel(label, x, y) {
+      return `<text class="node-subtitle" x="${x}" y="${Math.max(16, y)}">${escapeHtml(label)}</text>`;
+    }
+
+    function svgEdge(x1, y1, x2, y2, status) {
+      const mid = Math.max(x1 + 22, Math.min(x2 - 22, (x1 + x2) / 2));
+      return `<path class="edge ${status}" d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}"></path>`;
+    }
+
+    function renderModemCards(stats) {
+      const modems = stats.modems || [];
+      if (!modems.length) {
+        els.modemCards.innerHTML = '<div class="muted">No modems configured.</div>';
+        return;
       }
+
+      els.modemCards.innerHTML = modems.map((modem) => {
+        const health = healthState(modem);
+        return `<article class="card modem-card">
+          <div class="modem-title">
+            <div>
+              <h3>${escapeHtml(modem.modem_tag)}</h3>
+              <div class="muted small mono">${escapeHtml(modem.modem_interface)}</div>
+            </div>
+            ${badge(health.label, health.tone, health.active)}
+          </div>
+          <div class="kv">
+            <div class="kv-row"><span>Update stage</span><strong>${escapeHtml(modem.stage)}</strong></div>
+            <div class="kv-row"><span>Branch last update</span><strong>${escapeHtml(formatDate(modem.last_update))}</strong></div>
+            <div class="kv-row"><span>White URL</span>${probeLabel(modem.white_url_ok)}</div>
+            <div class="kv-row"><span>Gray URL</span>${probeLabel(modem.gray_url_ok)}</div>
+            <div class="kv-row"><span>Last internet check</span><strong>${escapeHtml(formatDate(modem.network_last_check))}</strong></div>
+            <div class="kv-row"><span>Next internet check</span><strong>${escapeHtml(formatDate(modem.network_next_check))}</strong></div>
+            <div class="kv-row"><span>Ping progress</span><strong>${formatNumber(modem.ping_done)}/${formatNumber(modem.ping_total)}</strong></div>
+            <div class="kv-row"><span>Nodes after ping</span><strong>${formatNumber(modem.nodes_after_ping)}</strong></div>
+            <div class="kv-row"><span>Tunnel progress</span><strong>${formatNumber(modem.tunnel_done)}/${formatNumber(modem.tunnel_total)}</strong></div>
+            <div class="kv-row"><span>Final cached nodes</span><strong>${formatNumber(modem.cached_nodes || modem.nodes_after_tunnel)}</strong></div>
+            <div class="kv-row"><span>Health error</span><code>${escapeHtml(modem.health_last_error || '-')}</code></div>
+            <div class="kv-row"><span>Update error</span><code>${escapeHtml(modem.last_error || '-')}</code></div>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    function renderEndpoints() {
+      const modems = state.config ? state.config.modems || [] : [];
+      const rows = [
+        { label: 'All modems', params: {} },
+        { label: 'All modems, limit 5', params: { limit: 5 } }
+      ];
+      for (const modem of modems) {
+        rows.push({ label: `${modem.modem_tag}`, params: { modem: modem.modem_tag } });
+        rows.push({ label: `${modem.modem_tag}, limit 5`, params: { modem: modem.modem_tag, limit: 5 } });
+      }
+
+      els.endpointList.innerHTML = rows.map((row) => {
+        const displayUrl = buildSubUrl(row.params, true);
+        const copyUrl = buildSubUrl(row.params, false);
+        return `<div class="endpoint-row">
+          <div class="muted small">${escapeHtml(row.label)}</div>
+          <div class="endpoint-url mono">${escapeHtml(displayUrl)}</div>
+          <div><button class="btn-primary copy-link" type="button" data-copy="${escapeHtml(copyUrl)}">Copy</button></div>
+        </div>`;
+      }).join('');
+      els.toggleToken.textContent = state.tokenVisible ? 'Hide Token' : 'Show Token';
     }
 
     async function loadConfig() {
       const config = await api('/api/config');
-      state.subscriptionToken = config.subscription_token;
+      state.config = config;
+      state.subscriptionToken = config.subscription_token || '';
       els.subscriptionUrls.value = (config.subscription_urls || []).join('\n');
       els.intervalInput.value = config.update_interval_minutes;
       els.timeoutInput.value = config.ping_timeout_ms;
       els.parallelInput.value = config.max_concurrent_pings;
-      els.tunnelParallelInput.value = config.max_concurrent_tunnels || 20;
-      els.networkCheckIntervalInput.value = config.network_check_interval_minutes || 10;
-      els.whiteUrlInput.value = config.white_url || 'https://www.gstatic.com/generate_204';
-      els.grayUrlInput.value = config.gray_url || 'https://example.com';
-      renderEndpoint();
+      els.tunnelParallelInput.value = config.max_concurrent_tunnels;
+      els.networkCheckIntervalInput.value = config.network_check_interval_minutes;
+      els.whiteUrlInput.value = config.white_url;
+      els.grayUrlInput.value = config.gray_url;
+      renderModemRows(config.modems || []);
+      renderEndpoints();
     }
 
     async function refreshStats() {
@@ -988,78 +709,168 @@
       renderStats(stats);
     }
 
+    function renderModemRows(modems) {
+      els.modemList.innerHTML = '';
+      for (const modem of modems) addModemRow(modem);
+      if (!modems.length) addModemRow({ modem_tag: 'default', modem_interface: 'wwan0' });
+    }
+
+    function addModemRow(modem = { modem_tag: '', modem_interface: '' }) {
+      const row = document.createElement('div');
+      row.className = 'modem-row';
+      row.innerHTML = `<label><span>Modem tag</span><input class="modem-tag-input" value="${escapeHtml(modem.modem_tag || '')}" placeholder="tele2" required></label><label><span>Interface</span><input class="modem-interface-input" value="${escapeHtml(modem.modem_interface || '')}" placeholder="wwan0" required></label><button class="btn-danger remove-modem" type="button">Remove</button>`;
+      row.querySelector('.remove-modem').addEventListener('click', () => {
+        row.remove();
+        if (!els.modemList.querySelector('.modem-row')) addModemRow();
+      });
+      els.modemList.appendChild(row);
+    }
+
+    function collectSettingsPayload() {
+      const updateInterval = Number(els.intervalInput.value);
+      const healthInterval = Number(els.networkCheckIntervalInput.value);
+      if (!Number.isFinite(updateInterval) || updateInterval <= 0) throw new Error('Update interval must be greater than zero');
+      if (!Number.isFinite(healthInterval) || healthInterval <= 0) throw new Error('Health check interval must be greater than zero');
+      if (healthInterval >= updateInterval) throw new Error('Health check interval must be less than update interval');
+
+      const modems = [...els.modemList.querySelectorAll('.modem-row')].map((row) => ({
+        modem_tag: row.querySelector('.modem-tag-input').value.trim(),
+        modem_interface: row.querySelector('.modem-interface-input').value.trim()
+      }));
+      validateModems(modems);
+
+      return {
+        subscription_urls: els.subscriptionUrls.value.split('\n').map((value) => value.trim()).filter(Boolean),
+        update_interval_minutes: updateInterval,
+        ping_timeout_ms: Number(els.timeoutInput.value),
+        max_concurrent_pings: Number(els.parallelInput.value),
+        max_concurrent_tunnels: Number(els.tunnelParallelInput.value),
+        network_check_interval_minutes: healthInterval,
+        white_url: els.whiteUrlInput.value.trim(),
+        gray_url: els.grayUrlInput.value.trim(),
+        modems
+      };
+    }
+
+    function validateModems(modems) {
+      if (!modems.length) throw new Error('At least one modem is required');
+      const tags = new Set();
+      for (const modem of modems) {
+        if (!modem.modem_tag) throw new Error('Modem tag must not be empty');
+        if (!/^[A-Za-z0-9_-]+$/.test(modem.modem_tag)) throw new Error(`Invalid modem tag: ${modem.modem_tag}`);
+        if (tags.has(modem.modem_tag)) throw new Error(`Duplicate modem tag: ${modem.modem_tag}`);
+        tags.add(modem.modem_tag);
+        if (!modem.modem_interface) throw new Error(`Interface is empty for ${modem.modem_tag}`);
+      }
+    }
+
+    function applyEvent(event) {
+      if (!state.stats) return;
+      const stats = structuredClone(state.stats);
+      const modem = event.modem_tag ? (stats.modems || []).find((item) => item.modem_tag === event.modem_tag) : null;
+
+      if (event.event === 'update_started') {
+        stats.is_updating = true;
+        stats.stage = 'fetch';
+        stats.nodes_total = 0;
+        stats.nodes_after_dedup = 0;
+        for (const item of stats.modems || []) {
+          item.stage = 'pending';
+          item.ping_done = 0;
+          item.ping_total = 0;
+          item.nodes_after_ping = 0;
+          item.tunnel_done = 0;
+          item.tunnel_total = 0;
+          item.nodes_after_tunnel = 0;
+          item.last_error = null;
+        }
+      }
+      if (event.event === 'fetch_complete') {
+        stats.stage = 'dedup';
+        if (event.nodes_total !== undefined) stats.nodes_total = event.nodes_total;
+      }
+      if (event.event === 'dedup_complete') {
+        stats.stage = 'modems';
+        if (event.nodes_total !== undefined) stats.nodes_total = event.nodes_total;
+        if (event.nodes_after_dedup !== undefined) stats.nodes_after_dedup = event.nodes_after_dedup;
+      }
+      if (modem) applyModemEvent(modem, event);
+      if (event.event === 'update_failed') {
+        stats.is_updating = false;
+        stats.stage = 'failed';
+        showToast(event.message || 'Update failed', 'error');
+      }
+      renderStats(stats);
+    }
+
+    function applyModemEvent(modem, event) {
+      if (event.event === 'modem_health_started') {
+        modem.health_check_in_progress = true;
+      }
+      if (event.event === 'modem_health_result' || event.event === 'modem_health_failed') {
+        modem.health_check_in_progress = Boolean(event.health_check_in_progress);
+        modem.white_url_ok = event.white_url_ok ?? modem.white_url_ok;
+        modem.gray_url_ok = event.gray_url_ok ?? modem.gray_url_ok;
+        modem.whitelist_mode = event.whitelist_mode ?? modem.whitelist_mode;
+        modem.modem_online = event.modem_online ?? modem.modem_online;
+        modem.network_last_check = event.last_check || modem.network_last_check;
+        modem.network_next_check = event.next_check || modem.network_next_check;
+        modem.health_last_error = event.event === 'modem_health_failed' ? event.message || 'Health check failed' : null;
+      }
+      if (event.event === 'modem_ping_progress') {
+        modem.stage = 'ping';
+        modem.ping_done = event.done || 0;
+        modem.ping_total = event.total || 0;
+      }
+      if (event.event === 'modem_ping_complete') {
+        modem.nodes_after_ping = event.nodes_after_ping || 0;
+      }
+      if (event.event === 'modem_tunnel_progress') {
+        modem.stage = 'tunnel';
+        modem.tunnel_done = event.done || 0;
+        modem.tunnel_total = event.total || 0;
+      }
+      if (event.event === 'modem_complete') {
+        modem.stage = 'complete';
+        modem.nodes_after_ping = event.nodes_after_ping ?? modem.nodes_after_ping;
+        modem.nodes_after_tunnel = event.nodes_after_tunnel ?? modem.nodes_after_tunnel;
+        modem.cached_nodes = modem.nodes_after_tunnel;
+        modem.last_error = null;
+      }
+      if (event.event === 'modem_failed') {
+        modem.stage = 'failed';
+        modem.last_error = event.message || 'Modem branch failed';
+      }
+    }
+
     function startPolling() {
       clearInterval(state.pollTimer);
       clearInterval(state.countdownTimer);
-
-      state.pollTimer = setInterval(async () => {
-        try {
-          await refreshStats();
-        } catch (error) {
-          if (error.message.includes('401')) {
-            showLogin();
-          }
-        }
-      }, 5000);
-
+      state.pollTimer = setInterval(() => refreshStats().catch((error) => {
+        if (error.message.includes('401')) showLogin();
+      }), 5000);
       state.countdownTimer = setInterval(() => {
-        els.countdown.textContent = formatCountdown(state.nextUpdate);
+        els.countdown.textContent = formatDuration(state.nextUpdate);
       }, 1000);
     }
 
     function connectWebSocket() {
-      if (state.ws) {
-        state.ws.close();
-      }
+      if (state.ws) state.ws.close();
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       state.ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
-      state.ws.onmessage = async (event) => {
-        let data = null;
-        try {
-          data = JSON.parse(event.data);
-        } catch (_) {
+      state.ws.onopen = () => refreshStats().catch(() => {});
+      state.ws.onmessage = async (message) => {
+        let event = null;
+        try { event = JSON.parse(message.data); } catch (_) { return; }
+        if (event.event === 'update_complete') {
+          showToast('Update completed');
+          await refreshStats().catch(() => {});
           return;
         }
-
-        if (data.event === 'ping_progress') {
-          els.pingProgress.textContent = `Pinging ${data.done}/${data.total} nodes`;
-        }
-        if (data.event === 'tunnel_progress') {
-          els.tunnelProgress.textContent = `Testing tunnels ${data.done}/${data.total}`;
-        }
-        if (data.event === 'update_started') {
-          state.connectivityStage = 'Preparing internet checks';
-          els.connectivityStage.textContent = state.connectivityStage;
-        }
-        if (data.event === 'connectivity_stage') {
-          state.connectivityStage = data.message || 'Internet checks in progress';
-          els.connectivityStage.textContent = state.connectivityStage;
-        }
-        if (data.event === 'connectivity_result') {
-          if (data.fallback_to_default_internet) {
-            state.connectivityStage = 'Modem internet is down, fallback enabled';
-          } else if (data.whitelist_mode) {
-            state.connectivityStage = 'White-list mode detected on modem';
-          } else {
-            state.connectivityStage = 'Internet checks completed';
-          }
-          els.connectivityStage.textContent = state.connectivityStage;
-          await refreshStats().catch(() => {});
-        }
-        if (data.event === 'update_complete') {
-          showToast('Update completed');
-          state.connectivityStage = 'Internet checks idle';
-          els.connectivityStage.textContent = state.connectivityStage;
-          await refreshStats().catch(() => {});
-        }
-        if (data.event === 'update_failed') {
-          showToast(data.message || 'Update failed', 'error');
-        }
+        applyEvent(event);
       };
       state.ws.onclose = () => {
-        if (state.isAuthenticated) {
-          setTimeout(connectWebSocket, 3000);
-        }
+        if (state.isAuthenticated) setTimeout(connectWebSocket, 3000);
       };
     }
 
@@ -1074,7 +885,6 @@
 
     function showLogin() {
       state.isAuthenticated = false;
-      state.connectivityStage = 'Internet checks idle';
       if (state.ws) {
         state.ws.close();
         state.ws = null;
@@ -1083,9 +893,6 @@
       clearInterval(state.countdownTimer);
       els.dashboard.classList.add('hidden');
       els.login.classList.remove('hidden');
-      if (els.connectivityStage) {
-        els.connectivityStage.textContent = state.connectivityStage;
-      }
     }
 
     els.loginForm.addEventListener('submit', async (event) => {
@@ -1105,22 +912,9 @@
 
     els.settingsForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const payload = {
-        subscription_urls: els.subscriptionUrls.value.split('\n').map(v => v.trim()).filter(Boolean),
-        update_interval_minutes: Number(els.intervalInput.value),
-        ping_timeout_ms: Number(els.timeoutInput.value),
-        max_concurrent_pings: Number(els.parallelInput.value),
-        max_concurrent_tunnels: Number(els.tunnelParallelInput.value),
-        network_check_interval_minutes: Number(els.networkCheckIntervalInput.value),
-        white_url: els.whiteUrlInput.value.trim(),
-        gray_url: els.grayUrlInput.value.trim()
-      };
-
       try {
-        await api('/api/config', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        const payload = collectSettingsPayload();
+        await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
         showToast('Settings saved');
         await loadConfig();
         await refreshStats();
@@ -1129,19 +923,22 @@
       }
     });
 
+    els.addModem.addEventListener('click', () => addModemRow());
+
     els.updateNow.addEventListener('click', async () => {
       try {
         await api('/api/update-now', { method: 'POST' });
-        showToast('Update started');
+        showToast('Update scheduled');
       } catch (error) {
         showToast(error.message || 'Failed to start update', 'error');
       }
     });
 
-    els.copyUrl.addEventListener('click', async () => {
+    els.endpointList.addEventListener('click', async (event) => {
+      const button = event.target.closest('.copy-link');
+      if (!button) return;
       try {
-        const url = `${window.location.origin}/sub?token=${state.subscriptionToken}`;
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(button.dataset.copy || '');
         showToast('Subscription URL copied');
       } catch (_) {
         showToast('Unable to copy URL', 'error');
@@ -1150,7 +947,7 @@
 
     els.toggleToken.addEventListener('click', () => {
       state.tokenVisible = !state.tokenVisible;
-      renderEndpoint();
+      renderEndpoints();
     });
 
     els.logout.addEventListener('click', () => {
@@ -1160,8 +957,6 @@
     });
 
     async function bootstrap() {
-      renderEndpoint();
-      els.connectivityStage.textContent = state.connectivityStage;
       try {
         await refreshStats();
         await showDashboard();
