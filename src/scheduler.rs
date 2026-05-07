@@ -702,17 +702,17 @@ async fn run_modem_branch_inner(
     )
     .await;
 
-    if let Some(error) = health.last_error.clone() {
-        return Err(anyhow!(error));
-    }
-
-    if health.white_url_ok == Some(false) {
+    if health.white_url_ok != Some(true) {
+        let message = health
+            .last_error
+            .clone()
+            .unwrap_or_else(|| "modem_offline".to_string());
         update_modem_progress(&shared, &modem.modem_tag, |progress| {
             progress.stage = ModemStage::Skipped;
-            progress.last_error = Some("modem_offline".to_string());
+            progress.last_error = Some(message.clone());
         })
         .await;
-        return Err(anyhow!("modem_offline"));
+        return Err(anyhow!(message));
     }
 
     validate_interface_binding(&modem.modem_interface).map_err(|error| {
