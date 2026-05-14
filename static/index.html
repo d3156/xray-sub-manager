@@ -310,7 +310,7 @@
     <section class="card graph-shell">
       <div class="section-head">
         <div class="eyebrow">Pipeline graph</div>
-        <h2>Fetch, dedup and per-modem branches</h2>
+        <h2>Fetch, dedup, common ping and modem tunnels</h2>
         <div id="graph-caption" class="muted small">Waiting for stats</div>
       </div>
       <div id="pipeline-graph" class="graph-scroll"></div>
@@ -572,30 +572,37 @@
 
       const commonFetch = graphStatus(stats.is_updating && stats.stage === 'fetch', stats.nodes_total > 0, false);
       const commonDedup = graphStatus(stats.is_updating && stats.stage === 'dedup', stats.nodes_after_dedup > 0, false);
+      const commonPing = graphStatus(
+        stats.is_updating && stats.stage === 'ping',
+        Number(stats.nodes_after_ping || 0) > 0 || (stats.is_updating && ['modems', 'complete'].includes(stats.stage)) || (!stats.is_updating && Boolean(stats.last_update)),
+        false
+      );
+      const pingSubtitle = stats.is_updating && Number(stats.ping_total || 0) > 0
+        ? `${formatNumber(stats.ping_done)}/${formatNumber(stats.ping_total)} checked`
+        : `${formatNumber(stats.nodes_after_ping)} online`;
       nodes.push(svgNode('Fetch', `${formatNumber(stats.nodes_total)} nodes`, 28, midY, commonFetch));
       nodes.push(svgNode('Dedup', `${formatNumber(Math.max(0, stats.nodes_total - stats.nodes_after_dedup))} removed`, 198, midY, commonDedup));
+      nodes.push(svgNode('TCP Ping', pingSubtitle, 362, midY, commonPing));
       edges.push(svgEdge(148, midY + 31, 198, midY + 31, commonDedup));
+      edges.push(svgEdge(318, midY + 31, 362, midY + 31, commonPing));
 
       if (!modems.length) {
-        nodes.push(svgNode('No modems', 'Configure at least one', 420, midY, 'pending'));
+        nodes.push(svgNode('No modems', 'Configure at least one', 522, midY, 'pending'));
       }
 
       modems.forEach((modem, index) => {
         const y = top + index * laneHeight;
         const health = healthState(modem);
         const healthStatus = health.tone === 'error' ? 'failed' : health.active ? 'active' : modem.network_last_check ? 'completed' : 'pending';
-        const pingStatus = stageNodeStatus(modem, 'ping');
         const tunnelStatus = stageNodeStatus(modem, 'tunnel');
         const resultStatus = modem.last_error ? 'failed' : modem.cached_nodes > 0 || modem.stage === 'complete' ? 'completed' : 'pending';
         const laneLabel = `${modem.modem_tag} / ${modem.modem_interface}`;
 
-        nodes.push(svgLaneLabel(laneLabel, 362, y - 8));
-        nodes.push(svgNode('Health', health.label, 362, y + 16, healthStatus));
-        nodes.push(svgNode('TCP Ping', `${formatNumber(modem.ping_done)}/${formatNumber(modem.ping_total)}`, 522, y + 16, pingStatus));
+        nodes.push(svgLaneLabel(laneLabel, 522, y - 8));
+        nodes.push(svgNode('Health', health.label, 522, y + 16, healthStatus));
         nodes.push(svgNode('Tunnel', `${formatNumber(modem.tunnel_done)}/${formatNumber(modem.tunnel_total)}`, 682, y + 16, tunnelStatus));
         nodes.push(svgNode('Result', `${formatNumber(modem.cached_nodes || modem.nodes_after_tunnel)} nodes`, 842, y + 16, resultStatus));
-        edges.push(svgEdge(318, midY + 31, 362, y + 47, healthStatus));
-        edges.push(svgEdge(482, y + 47, 522, y + 47, pingStatus));
+        edges.push(svgEdge(482, midY + 31, 522, y + 47, healthStatus));
         edges.push(svgEdge(642, y + 47, 682, y + 47, tunnelStatus));
         edges.push(svgEdge(802, y + 47, 842, y + 47, resultStatus));
       });
@@ -655,8 +662,7 @@
             <div class="kv-row"><span>Gray URL</span>${probeLabel(modem.gray_url_ok)}</div>
             <div class="kv-row"><span>Last internet check</span><strong>${escapeHtml(formatDate(modem.network_last_check))}</strong></div>
             <div class="kv-row"><span>Next internet check</span><strong>${escapeHtml(formatDate(modem.network_next_check))}</strong></div>
-            <div class="kv-row"><span>Ping progress</span><strong>${formatNumber(modem.ping_done)}/${formatNumber(modem.ping_total)}</strong></div>
-            <div class="kv-row"><span>Nodes after ping</span><strong>${formatNumber(modem.nodes_after_ping)}</strong></div>
+            <div class="kv-row"><span>Tunnel input nodes</span><strong>${formatNumber(modem.nodes_after_ping)}</strong></div>
             <div class="kv-row"><span>Tunnel progress</span><strong>${formatNumber(modem.tunnel_done)}/${formatNumber(modem.tunnel_total)}</strong></div>
             <div class="kv-row"><span>Final cached nodes</span><strong>${formatNumber(modem.cached_nodes || modem.nodes_after_tunnel)}</strong></div>
             <div class="kv-row"><span>Health error</span><code>${escapeHtml(modem.health_last_error || '-')}</code></div>
@@ -775,6 +781,9 @@
         stats.stage = 'fetch';
         stats.nodes_total = 0;
         stats.nodes_after_dedup = 0;
+        stats.ping_done = 0;
+        stats.ping_total = 0;
+        stats.nodes_after_ping = 0;
         for (const item of stats.modems || []) {
           item.stage = 'pending';
           item.ping_done = 0;
@@ -791,9 +800,20 @@
         if (event.nodes_total !== undefined) stats.nodes_total = event.nodes_total;
       }
       if (event.event === 'dedup_complete') {
-        stats.stage = 'modems';
+        stats.stage = event.stage || 'ping';
         if (event.nodes_total !== undefined) stats.nodes_total = event.nodes_total;
         if (event.nodes_after_dedup !== undefined) stats.nodes_after_dedup = event.nodes_after_dedup;
+      }
+      if (event.event === 'ping_progress') {
+        stats.stage = 'ping';
+        stats.ping_done = event.done || 0;
+        stats.ping_total = event.total || 0;
+      }
+      if (event.event === 'ping_complete') {
+        stats.stage = event.stage || 'modems';
+        stats.ping_done = event.done ?? stats.ping_done;
+        stats.ping_total = event.total ?? stats.ping_total;
+        stats.nodes_after_ping = event.nodes_after_ping ?? stats.nodes_after_ping;
       }
       if (modem) applyModemEvent(modem, event);
       if (event.event === 'update_failed') {

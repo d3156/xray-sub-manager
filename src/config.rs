@@ -78,6 +78,8 @@ pub struct SubscriptionCache {
     pub last_update: DateTime<Utc>,
     pub nodes_total: usize,
     pub nodes_after_dedup: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodes_after_ping: Option<usize>,
     pub by_modem: BTreeMap<String, ModemCacheEntry>,
 }
 
@@ -201,12 +203,18 @@ impl UpdateConfigRequest {
 }
 
 impl SubscriptionCache {
-    pub fn empty(now: DateTime<Utc>, nodes_total: usize, nodes_after_dedup: usize) -> Self {
+    pub fn empty(
+        now: DateTime<Utc>,
+        nodes_total: usize,
+        nodes_after_dedup: usize,
+        nodes_after_ping: usize,
+    ) -> Self {
         Self {
             schema_version: SUBSCRIPTION_CACHE_SCHEMA_VERSION,
             last_update: now,
             nodes_total,
             nodes_after_dedup,
+            nodes_after_ping: Some(nodes_after_ping),
             by_modem: BTreeMap::new(),
         }
     }

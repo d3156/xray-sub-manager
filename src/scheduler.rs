@@ -23,7 +23,7 @@ use crate::{
     dedup::dedup_nodes,
     fetcher::fetch_all,
     parser::{self, Node},
-    pinger::{ping_nodes_via_interface, validate_interface_binding, ProgressCallback},
+    pinger::{ping_nodes, validate_interface_binding, ProgressCallback},
     renamer::rename_nodes,
     tunnel::probe_tunnels,
 };
@@ -92,6 +92,7 @@ pub enum UpdateStage {
     Idle,
     Fetch,
     Dedup,
+    Ping,
     Modems,
     Complete,
     Failed,
@@ -102,7 +103,6 @@ pub enum UpdateStage {
 pub enum ModemStage {
     Pending,
     Health,
-    Ping,
     Tunnel,
     Complete,
     Failed,
@@ -116,6 +116,9 @@ pub struct UpdateProgress {
     pub stage: UpdateStage,
     pub nodes_total: usize,
     pub nodes_after_dedup: usize,
+    pub ping_done: usize,
+    pub ping_total: usize,
+    pub nodes_after_ping: usize,
     pub modems: BTreeMap<String, ModemProgress>,
 }
 
@@ -127,6 +130,9 @@ impl UpdateProgress {
             stage: UpdateStage::Idle,
             nodes_total: 0,
             nodes_after_dedup: 0,
+            ping_done: 0,
+            ping_total: 0,
+            nodes_after_ping: 0,
             modems: initial_modem_progress(&config.modems),
         }
     }
@@ -138,6 +144,9 @@ impl UpdateProgress {
             stage: UpdateStage::Fetch,
             nodes_total: 0,
             nodes_after_dedup: 0,
+            ping_done: 0,
+            ping_total: 0,
+            nodes_after_ping: 0,
             modems: initial_modem_progress(&config.modems),
         }
     }
@@ -313,6 +322,9 @@ pub struct StatsSnapshot {
     pub stage: UpdateStage,
     pub nodes_total: usize,
     pub nodes_after_dedup: usize,
+    pub ping_done: usize,
+    pub ping_total: usize,
+    pub nodes_after_ping: usize,
     pub modems: Vec<ModemStats>,
 }
 
@@ -541,19 +553,45 @@ async fn run_update_cycle_inner(shared: &SharedState, config_snapshot: AppConfig
     {
         let mut progress = shared.update_progress.write().await;
         progress.nodes_after_dedup = nodes_after_dedup;
-        progress.stage = UpdateStage::Modems;
+        progress.ping_done = 0;
+        progress.ping_total = nodes_after_dedup;
+        progress.nodes_after_ping = 0;
+        progress.stage = UpdateStage::Ping;
     }
     let mut dedup_event = UpdateEvent::new("dedup_complete");
-    dedup_event.stage = Some("modems".to_string());
+    dedup_event.stage = Some("ping".to_string());
     dedup_event.nodes_total = Some(nodes_total);
     dedup_event.nodes_after_dedup = Some(nodes_after_dedup);
     let _ = shared.events_tx.send(dedup_event);
+
+    let ping_callback = common_ping_progress_callback(shared.clone());
+    let pinged_nodes = ping_nodes(
+        deduped_nodes,
+        Duration::from_millis(config_snapshot.ping_timeout_ms),
+        config_snapshot.max_concurrent_pings,
+        Some(ping_callback),
+    )
+    .await;
+    let nodes_after_ping = pinged_nodes.len();
+    {
+        let mut progress = shared.update_progress.write().await;
+        progress.ping_done = nodes_after_dedup;
+        progress.ping_total = nodes_after_dedup;
+        progress.nodes_after_ping = nodes_after_ping;
+        progress.stage = UpdateStage::Modems;
+    }
+    let mut ping_complete = UpdateEvent::new("ping_complete");
+    ping_complete.stage = Some("modems".to_string());
+    ping_complete.done = Some(nodes_after_dedup);
+    ping_complete.total = Some(nodes_after_dedup);
+    ping_complete.nodes_after_ping = Some(nodes_after_ping);
+    let _ = shared.events_tx.send(ping_complete);
 
     let mut branches = JoinSet::new();
     for modem in config_snapshot.modems.clone() {
         let shared = shared.clone();
         let branch_config = config_snapshot.clone();
-        let branch_nodes = deduped_nodes.clone();
+        let branch_nodes = pinged_nodes.clone();
         branches.spawn(async move {
             run_modem_branch(shared, branch_config, modem, branch_nodes).await
         });
@@ -576,7 +614,8 @@ async fn run_update_cycle_inner(shared: &SharedState, config_snapshot: AppConfig
     let now = Utc::now();
     let actual_config = shared.config.read().await.clone();
     let old_cache = shared.subscription_cache.read().await.clone();
-    let mut next_cache = SubscriptionCache::empty(now, nodes_total, nodes_after_dedup);
+    let mut next_cache =
+        SubscriptionCache::empty(now, nodes_total, nodes_after_dedup, nodes_after_ping);
     for modem in &actual_config.modems {
         if let Some(mut entry) = successful_entries.remove(&modem.modem_tag) {
             entry.modem_interface = modem.modem_interface.clone();
@@ -620,11 +659,12 @@ async fn run_update_cycle_inner(shared: &SharedState, config_snapshot: AppConfig
     complete_event.stage = Some("complete".to_string());
     complete_event.nodes_total = Some(nodes_total);
     complete_event.nodes_after_dedup = Some(nodes_after_dedup);
+    complete_event.nodes_after_ping = Some(nodes_after_ping);
     complete_event.nodes_after_tunnel = Some(nodes_after_tunnel);
     let _ = shared.events_tx.send(complete_event);
     info!(
         nodes_total,
-        nodes_after_dedup, nodes_after_tunnel, "subscription update completed"
+        nodes_after_dedup, nodes_after_ping, nodes_after_tunnel, "subscription update completed"
     );
 
     Ok(())
@@ -640,16 +680,11 @@ async fn run_modem_branch(
     shared: SharedState,
     config_snapshot: AppConfig,
     modem: ModemConfig,
-    deduped_nodes: Vec<Node>,
+    pinged_nodes: Vec<Node>,
 ) -> BranchResult {
     let modem_tag = modem.modem_tag.clone();
-    let result = run_modem_branch_inner(
-        shared.clone(),
-        config_snapshot,
-        modem.clone(),
-        deduped_nodes,
-    )
-    .await;
+    let result =
+        run_modem_branch_inner(shared.clone(), config_snapshot, modem.clone(), pinged_nodes).await;
 
     match result {
         Ok(entry) => BranchResult {
@@ -681,10 +716,14 @@ async fn run_modem_branch_inner(
     shared: SharedState,
     config_snapshot: AppConfig,
     modem: ModemConfig,
-    deduped_nodes: Vec<Node>,
+    pinged_nodes: Vec<Node>,
 ) -> Result<ModemCacheEntry> {
+    let nodes_after_ping = pinged_nodes.len();
     update_modem_progress(&shared, &modem.modem_tag, |progress| {
         progress.stage = ModemStage::Health;
+        progress.ping_done = nodes_after_ping;
+        progress.ping_total = nodes_after_ping;
+        progress.nodes_after_ping = nodes_after_ping;
         progress.last_error = None;
     })
     .await;
@@ -723,42 +762,7 @@ async fn run_modem_branch_inner(
         )
     })?;
 
-    let ping_total = deduped_nodes.len();
-    update_modem_progress(&shared, &modem.modem_tag, |progress| {
-        progress.stage = ModemStage::Ping;
-        progress.ping_done = 0;
-        progress.ping_total = ping_total;
-        progress.nodes_after_ping = 0;
-    })
-    .await;
-
-    let ping_callback = progress_callback(
-        shared.clone(),
-        modem.clone(),
-        "modem_ping_progress",
-        ProgressKind::Ping,
-    );
-    let online_nodes = ping_nodes_via_interface(
-        deduped_nodes,
-        Duration::from_millis(config_snapshot.ping_timeout_ms),
-        config_snapshot.max_concurrent_pings,
-        &modem.modem_interface,
-        Some(ping_callback),
-    )
-    .await;
-    let nodes_after_ping = online_nodes.len();
-    update_modem_progress(&shared, &modem.modem_tag, |progress| {
-        progress.ping_done = ping_total;
-        progress.ping_total = ping_total;
-        progress.nodes_after_ping = nodes_after_ping;
-    })
-    .await;
-    let mut ping_complete = UpdateEvent::modem_event("modem_ping_complete", &modem);
-    ping_complete.stage = Some("ping".to_string());
-    ping_complete.nodes_after_ping = Some(nodes_after_ping);
-    let _ = shared.events_tx.send(ping_complete);
-
-    let tunnel_total = online_nodes.len();
+    let tunnel_total = pinged_nodes.len();
     update_modem_progress(&shared, &modem.modem_tag, |progress| {
         progress.stage = ModemStage::Tunnel;
         progress.tunnel_done = 0;
@@ -773,7 +777,7 @@ async fn run_modem_branch_inner(
         "modem_tunnel_progress",
         ProgressKind::Tunnel,
     );
-    let tunnel_probe_input = online_nodes;
+    let tunnel_probe_input = pinged_nodes;
     let mut tunnel_nodes = probe_tunnels(
         tunnel_probe_input.clone(),
         Duration::from_millis(config_snapshot.ping_timeout_ms),
@@ -824,8 +828,25 @@ async fn run_modem_branch_inner(
 
 #[derive(Clone, Copy)]
 enum ProgressKind {
-    Ping,
     Tunnel,
+}
+
+fn common_ping_progress_callback(shared: SharedState) -> ProgressCallback {
+    let events_tx = shared.events_tx.clone();
+    Arc::new(move |done, total| {
+        let mut event = UpdateEvent::new("ping_progress");
+        event.stage = Some("ping".to_string());
+        event.done = Some(done);
+        event.total = Some(total);
+        let _ = events_tx.send(event);
+
+        let shared = shared.clone();
+        tokio::spawn(async move {
+            let mut progress = shared.update_progress.write().await;
+            progress.ping_done = done;
+            progress.ping_total = total;
+        });
+    })
 }
 
 fn progress_callback(
@@ -841,7 +862,6 @@ fn progress_callback(
         event.total = Some(total);
         event.stage = Some(
             match kind {
-                ProgressKind::Ping => "ping",
                 ProgressKind::Tunnel => "tunnel",
             }
             .to_string(),
@@ -852,10 +872,6 @@ fn progress_callback(
         let modem_tag = modem.modem_tag.clone();
         tokio::spawn(async move {
             update_modem_progress(&shared, &modem_tag, |progress| match kind {
-                ProgressKind::Ping => {
-                    progress.ping_done = done;
-                    progress.ping_total = total;
-                }
                 ProgressKind::Tunnel => {
                     progress.tunnel_done = done;
                     progress.tunnel_total = total;
@@ -1092,6 +1108,28 @@ pub async fn stats_snapshot(shared: &SharedState) -> Result<StatsSnapshot> {
             .map(|cache| cache.nodes_after_dedup)
             .unwrap_or(0)
     };
+    let (ping_done, ping_total, nodes_after_ping) = if is_updating {
+        (
+            progress.ping_done,
+            progress.ping_total,
+            progress.nodes_after_ping,
+        )
+    } else {
+        let nodes_after_ping = cache
+            .as_ref()
+            .map(|cache| {
+                cache.nodes_after_ping.unwrap_or_else(|| {
+                    cache
+                        .by_modem
+                        .values()
+                        .map(|entry| entry.nodes_after_ping)
+                        .max()
+                        .unwrap_or(0)
+                })
+            })
+            .unwrap_or(0);
+        (nodes_after_dedup, nodes_after_dedup, nodes_after_ping)
+    };
 
     let mut modems = Vec::with_capacity(config.modems.len());
     for modem in &config.modems {
@@ -1126,6 +1164,9 @@ pub async fn stats_snapshot(shared: &SharedState) -> Result<StatsSnapshot> {
         stage,
         nodes_total,
         nodes_after_dedup,
+        ping_done,
+        ping_total,
+        nodes_after_ping,
         modems,
     })
 }

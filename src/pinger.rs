@@ -29,11 +29,10 @@ pub fn validate_interface_binding(modem_interface: &str) -> io::Result<()> {
     bind_tcp_socket_to_device(&socket, modem_interface)
 }
 
-pub async fn ping_nodes_via_interface(
+pub async fn ping_nodes(
     nodes: Vec<Node>,
     ping_timeout: Duration,
     max_concurrent: usize,
-    modem_interface: &str,
     progress_callback: Option<ProgressCallback>,
 ) -> Vec<Node> {
     if nodes.is_empty() {
@@ -49,15 +48,13 @@ pub async fn ping_nodes_via_interface(
         let semaphore = semaphore.clone();
         let done_counter = done_counter.clone();
         let progress_callback = progress_callback.clone();
-        let modem_interface = modem_interface.to_string();
 
         tasks.spawn(async move {
             let permit = semaphore.acquire_owned().await.ok();
             let started_at = Instant::now();
             let host = node.host.clone();
             let port = node.port;
-            let result =
-                ping_single_node_via_interface(&host, port, ping_timeout, &modem_interface).await;
+            let result = ping_single_node(&host, port, ping_timeout).await;
 
             let mut node = node;
             match result {
@@ -67,11 +64,10 @@ pub async fn ping_nodes_via_interface(
                 }
                 Err(error) => {
                     warn!(
-                        modem_interface = %modem_interface,
                         host = %host,
                         port,
                         error = %error,
-                        "interface-bound node TCP probe failed"
+                        "node TCP probe failed"
                     );
                 }
             }
@@ -98,12 +94,7 @@ pub async fn ping_nodes_via_interface(
     online
 }
 
-async fn ping_single_node_via_interface(
-    host: &str,
-    port: u16,
-    ping_timeout: Duration,
-    modem_interface: &str,
-) -> io::Result<()> {
+async fn ping_single_node(host: &str, port: u16, ping_timeout: Duration) -> io::Result<()> {
     let target = format!("{host}:{port}");
     let addresses = match timeout(ping_timeout, lookup_host((host, port))).await {
         Ok(Ok(addresses)) => addresses.collect::<Vec<_>>(),
@@ -125,7 +116,7 @@ async fn ping_single_node_via_interface(
 
     let mut last_error = None;
     for address in addresses {
-        match connect_addr_via_interface(address, ping_timeout, modem_interface).await {
+        match connect_addr(address, ping_timeout).await {
             Ok(()) => return Ok(()),
             Err(error) => last_error = Some(error),
         }
@@ -139,17 +130,12 @@ async fn ping_single_node_via_interface(
     }))
 }
 
-async fn connect_addr_via_interface(
-    address: SocketAddr,
-    ping_timeout: Duration,
-    modem_interface: &str,
-) -> io::Result<()> {
+async fn connect_addr(address: SocketAddr, ping_timeout: Duration) -> io::Result<()> {
     let socket = if address.is_ipv4() {
         TcpSocket::new_v4()?
     } else {
         TcpSocket::new_v6()?
     };
-    bind_tcp_socket_to_device(&socket, modem_interface)?;
 
     match timeout(ping_timeout, socket.connect(address)).await {
         Ok(Ok(stream)) => {
